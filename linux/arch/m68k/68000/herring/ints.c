@@ -9,12 +9,33 @@
 asmlinkage void system_call(void);
 asmlinkage irqreturn_t inthandler1(void);
 
+static u8 counter = 0;
+
 void process_int(int vec, struct pt_regs *fp)
 {
-    MEM(DUART_OPR_RESET); // Stop counter, i.e. reset the timer
+    // Determine the type of interrupt
+    u8 misr = MEM(DUART_MISR);
 
-    // TODO: hardcoded to 1, use the vec param?
-    do_IRQ(1, fp);
+    if (misr & DUART_INTR_COUNTER)
+    {
+        // Counter timed out
+        MEM(DUART_OPR_RESET); // Read the OPR port to clear the counter and reset the timer. This clears the interrupt
+
+        MEM(DUART_OPR) = 0xFF;
+        MEM(DUART_OPR_RESET) = counter;
+        counter++;
+
+        do_IRQ(1, fp);
+    }
+
+    if (misr & DUART_INTR_RXRDY)
+    {
+        // RX character available
+        u8 a = MEM(DUART_RBB); // Read the available byte. This clears the interrupt
+        // mputc(a);                   // Print the character back out
+
+        do_IRQ(2, fp);
+    }
 }
 
 static void intc_irq_unmask(struct irq_data *d)

@@ -1,3 +1,5 @@
+#include <linux/platform_device.h>
+#include <linux/platform_data/serial-sccnxp.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -18,6 +20,26 @@
 static u32 mackerel_tick_count;
 static irq_handler_t timer_interrupt;
 
+static struct resource xr68c681_resources[] = {
+	DEFINE_RES_MEM(0x3E0000, 0x10),
+	DEFINE_RES_IRQ(2), // TODO: Set this to the correct interrupt
+};
+
+static struct sccnxp_pdata xr68c681_info = {
+	.reg_shift = 0,
+	.mctrl_cfg[0] = MCTRL_SIG(DIR_OP, LINE_OP0),
+	.mctrl_cfg[1] = MCTRL_SIG(DIR_OP, LINE_OP1),
+};
+
+static struct platform_device xr68c681 = {
+	.name = "sc68681",
+	.resource = xr68c681_resources,
+	.num_resources = ARRAY_SIZE(xr68c681_resources),
+	.dev = {
+		.platform_data = &xr68c681_info,
+	},
+};
+
 static void mackerel_console_write(struct console *co, const char *str, unsigned int count)
 {
 	unsigned i = 0;
@@ -33,8 +55,7 @@ static struct console mackerel_console_driver = {
 	.name = "mackconsole",
 	.flags = CON_PRINTBUFFER,
 	.index = -1,
-	.write = mackerel_console_write
-};
+	.write = mackerel_console_write};
 
 static irqreturn_t hw_tick(int irq, void *dummy)
 {
@@ -92,10 +113,31 @@ void mackerel_sched_init(irq_handler_t handler)
 
 void __init config_BSP(char *command, int len)
 {
-	printk(KERN_INFO "\Herring-8 68k support by Colin Maykish <crmaykish@gmail.com>\n");
+	printk(KERN_INFO "Mackerel 68k support by Colin Maykish <crmaykish@gmail.com>\n");
 
 	mach_reset = mackerel_reset;
 	mach_sched_init = mackerel_sched_init;
 
 	register_console(&mackerel_console_driver);
 }
+
+int __init mackerel_platform_init(void)
+{
+	// TODO: register platform devices
+
+	printk(KERN_INFO "Setting up Mackerel platform devices");
+
+	if (platform_device_register(&xr68c681))
+	{
+		panic("Unable to register XR68C681 UART device");
+	}
+
+	// if (platform_device_register(&maxi030ide))
+	// 	panic("Unable to register IDE device");
+	// if (platform_device_register(&maxi030rtl8019))
+	// 	panic("Unable to register RTL8019 device");
+
+	return 0;
+}
+
+arch_initcall(mackerel_platform_init);

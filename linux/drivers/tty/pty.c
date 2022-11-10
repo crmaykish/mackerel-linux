@@ -592,8 +592,19 @@ static void __init legacy_pty_init(void)
 	pty_slave_driver->other = pty_driver;
 	tty_set_operations(pty_slave_driver, &slave_pty_ops_bsd);
 
-	if (tty_register_driver(pty_driver))
+	int a = tty_register_driver(pty_driver);
+
+	if (a)
+	{
+		
+		printk(KERN_INFO "tty_register return: %d\r", a);
+		
 		panic("Couldn't register pty driver");
+
+	}
+
+
+
 	if (tty_register_driver(pty_slave_driver))
 		panic("Couldn't register pty slave driver");
 }

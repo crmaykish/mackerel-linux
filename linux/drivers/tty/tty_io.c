@@ -3453,6 +3453,7 @@ int tty_register_driver(struct tty_driver *driver)
 	struct device *d;
 
 	if (!driver->major) {
+		printk(KERN_INFO "driver major error\r");
 		error = alloc_chrdev_region(&dev, driver->minor_start,
 						driver->num, driver->name);
 		if (!error) {
@@ -3464,12 +3465,19 @@ int tty_register_driver(struct tty_driver *driver)
 		error = register_chrdev_region(dev, driver->num, driver->name);
 	}
 	if (error < 0)
+	{
+		printk(KERN_INFO "error < 0\r");
 		goto err;
+	}
 
 	if (driver->flags & TTY_DRIVER_DYNAMIC_ALLOC) {
 		error = tty_cdev_add(driver, dev, 0, driver->num);
 		if (error)
+		{
+			printk(KERN_INFO "tty_cdev_add error\r");
 			goto err_unreg_char;
+		}
+			
 	}
 
 	mutex_lock(&tty_mutex);
