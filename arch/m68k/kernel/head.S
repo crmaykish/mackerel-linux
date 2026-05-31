@@ -579,10 +579,6 @@ ENTRY(_stext)
 	.long	MACH_Q40, Q40_BOOTI_VERSION
 	.long	MACH_HP300, HP300_BOOTI_VERSION
 	.long	0
-#ifdef CONFIG_MACKEREL
-	.long	0x4D4B524C	/* "MKRL" — Mackerel image header magic */
-	.long	_end		/* kernel end address; bootloader reads this */
-#endif
 1:	jra	__start
 
 .equ	kernel_pg_dir,_stext
@@ -597,6 +593,18 @@ ENTRY(__start)
  * Setup initial stack pointer
  */
 	lea	%pc@(_stext),%sp
+
+#ifdef CONFIG_MACKEREL
+/* Normally a bootloader would write bootinfo before jumping to the kernel, 
+ * but we just hardcode it here for simplicity. */
+	lea	%pc@(_end),%a0
+	movew	#BI_MACHTYPE,%a0@(0)  ;  movew	#8,%a0@(2)   ;  movel	#MACH_MACKEREL,%a0@(4)   /* 15 */
+	movew	#BI_CPUTYPE, %a0@(8)  ;  movew	#8,%a0@(10)  ;  movel	#CPU_68030,    %a0@(12)  /* 0x2 */
+	movew	#BI_FPUTYPE, %a0@(16) ;  movew	#8,%a0@(18)  ;  movel	#FPU_68882,    %a0@(20)  /* 0x2 */
+	movew	#BI_MMUTYPE, %a0@(24) ;  movew	#8,%a0@(26)  ;  movel	#MMU_68030,    %a0@(28)  /* 0x2 */
+	movew	#BI_MEMCHUNK,%a0@(32) ;  movew	#12,%a0@(34) ;  movel	#0,            %a0@(36)  ;  movel	#0x08000000,%a0@(40)  /* 128 MB at 0 */
+	movew	#BI_LAST,    %a0@(44) ;  movew	#4,%a0@(46)
+#endif /* CONFIG_MACKEREL */
 
 /*
  * Record the CPU and machine type.
