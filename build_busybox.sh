@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a static BusyBox binary for m68k-mackerel-linux-musl.
+# Build a dynamically linked BusyBox binary for m68k-mackerel-linux-musl.
 # Output: ./busybox in the repo root.
 set -e
 
@@ -50,9 +50,9 @@ cfg_str() {
     fi
 }
 
-# Static linking — required for embedded use with musl
-cfg_enable STATIC
-cfg_enable STATIC_LIBGCC
+# Dynamic linking
+cfg_disable STATIC
+cfg_disable STATIC_LIBGCC
 
 cfg_enable UDHCPC
 cfg_enable UDHCPC6
@@ -80,7 +80,7 @@ yes "" | make ARCH=m68k CROSS_COMPILE="$CROSS" oldconfig
 
 # oldconfig reverts options that differ from defconfig defaults back to n when
 # answered by `yes ""` — re-apply anything that must survive the pass.
-cfg_enable  STATIC
+cfg_disable STATIC
 cfg_disable TC
 
 echo "[*] Building..."

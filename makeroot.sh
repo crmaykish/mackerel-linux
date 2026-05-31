@@ -47,7 +47,7 @@ fdisk -l "$DRIVE"
 # ── Build rootfs tree ─────────────────────────────────────────────────────────
 
 echo "[*] Building root filesystem tree..."
-mkdir -p "$ROOTFS_DIR"/{bin,sbin,etc,proc,sys,dev,tmp,mnt,boot,root,lib,usr/bin,usr/sbin,usr/share/udhcpc,var/log,var/run,etc/init.d}
+mkdir -p "$ROOTFS_DIR"/{bin,sbin,etc,proc,sys,dev,tmp,mnt,boot,root,lib,usr/bin,usr/sbin,usr/lib,usr/share/udhcpc,var/log,var/run,etc/init.d}
 chmod 1777 "$ROOTFS_DIR/tmp"
 chmod 700  "$ROOTFS_DIR/root"
 
@@ -92,6 +92,32 @@ done
 # init lives in /sbin
 ln -sf ../bin/busybox "$ROOTFS_DIR/sbin/init"
 ln -sf ../bin/busybox "$ROOTFS_DIR/usr/sbin/udhcpc"
+
+echo "[*] Installing shared libraries..."
+REAL_HOME="$(getent passwd "${SUDO_USER:-$(whoami)}" | cut -d: -f6)"
+SYSROOT="$REAL_HOME/x-tools/m68k-mackerel-linux-musl/m68k-mackerel-linux-musl/sysroot"
+STRIP="$REAL_HOME/x-tools/m68k-mackerel-linux-musl/bin/m68k-mackerel-linux-musl-strip"
+
+if [ ! -d "$SYSROOT" ]; then
+    echo "Error: sysroot not found at $SYSROOT"
+    exit 1
+fi
+
+# musl libc — also serves as the dynamic linker
+install -m755 "$SYSROOT/usr/lib/libc.so"        "$ROOTFS_DIR/usr/lib/libc.so"
+ln -sf ../usr/lib/libc.so "$ROOTFS_DIR/lib/ld-musl-m68k.so.1"
+
+# GCC runtime
+install -m755 "$SYSROOT/lib/libgcc_s.so.2"      "$ROOTFS_DIR/lib/libgcc_s.so.2"
+ln -sf libgcc_s.so.2      "$ROOTFS_DIR/lib/libgcc_s.so"
+
+# Atomic operations
+install -m755 "$SYSROOT/lib/libatomic.so.1.2.0" "$ROOTFS_DIR/lib/libatomic.so.1.2.0"
+ln -sf libatomic.so.1.2.0 "$ROOTFS_DIR/lib/libatomic.so.1"
+ln -sf libatomic.so.1.2.0 "$ROOTFS_DIR/lib/libatomic.so"
+
+# Strip debug info from copied libraries
+"$STRIP" "$ROOTFS_DIR/usr/lib/libc.so" "$ROOTFS_DIR/lib/libgcc_s.so.2" "$ROOTFS_DIR/lib/libatomic.so.1.2.0"
 
 echo "[*] Writing /usr/share/udhcpc/default.script..."
 cat > "$ROOTFS_DIR/usr/share/udhcpc/default.script" <<'EOF'
