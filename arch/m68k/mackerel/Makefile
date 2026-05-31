@@ -1,0 +1,1 @@
+obj-$(CONFIG_MACKEREL) += mackerel.o config.o

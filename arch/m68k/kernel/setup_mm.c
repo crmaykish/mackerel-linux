@@ -50,6 +50,10 @@
 #include <asm/natfeat.h>
 #include <asm/config.h>
 
+#ifdef CONFIG_MACKEREL
+#include <asm/mackerel.h>
+#endif
+
 #if !FPSTATESIZE || !NR_IRQS
 #warning No CPU/platform type selected, your kernel will not work!
 #warning Are you building an allnoconfig kernel?
@@ -180,6 +184,8 @@ static void __init m68k_parse_bootinfo(const struct bi_record *record)
 				unknown = hp300_parse_bootinfo(record);
 			else if (MACH_IS_APOLLO)
 				unknown = apollo_parse_bootinfo(record);
+			else if (MACH_IS_MACKEREL)
+				unknown = mackerel_parse_bootinfo(record);
 			else if (MACH_IS_VIRT)
 				unknown = virt_parse_bootinfo(record);
 			else
@@ -316,6 +322,11 @@ void __init setup_arch(char **cmdline_p)
 		cf_bootmem_alloc();
 		cf_mmu_context_init();
 		config_BSP(NULL, 0);
+		break;
+#endif
+#ifdef CONFIG_MACKEREL
+	case MACH_MACKEREL:
+		config_mackerel();
 		break;
 #endif
 #ifdef CONFIG_VIRT

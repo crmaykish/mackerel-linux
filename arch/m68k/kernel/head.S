@@ -531,6 +531,7 @@ func_define	putn,1
 #define is_not_apollo(lab) cmpl &MACH_APOLLO,%pc@(m68k_machtype); jne lab
 #define is_not_q40(lab) cmpl &MACH_Q40,%pc@(m68k_machtype); jne lab
 #define is_not_sun3x(lab) cmpl &MACH_SUN3X,%pc@(m68k_machtype); jne lab
+#define is_not_mackerel(lab) cmpl &MACH_MACKEREL,%pc@(m68k_machtype); jne lab
 #define is_not_virt(lab) cmpl &MACH_VIRT,%pc@(m68k_machtype); jne lab
 
 #define hasnt_leds(lab) cmpl &MACH_HP300,%pc@(m68k_machtype); \
@@ -578,6 +579,10 @@ ENTRY(_stext)
 	.long	MACH_Q40, Q40_BOOTI_VERSION
 	.long	MACH_HP300, HP300_BOOTI_VERSION
 	.long	0
+#ifdef CONFIG_MACKEREL
+	.long	0x4D4B524C	/* "MKRL" — Mackerel image header magic */
+	.long	_end		/* kernel end address; bootloader reads this */
+#endif
 1:	jra	__start
 
 .equ	kernel_pg_dir,_stext
@@ -933,6 +938,19 @@ L(nocon):
 		%pc@(m68k_supervisor_cachemode)
 
 	putc	'C'
+
+#ifdef CONFIG_MACKEREL
+	is_not_mackerel(L(notmackerel))
+
+	/* Map DRAM physical 0x00000000 to virtual 0x00000000 (128 MB, cached) */
+	mmu_map		#0x00000000,#0x00000000,#0x08000000,#0
+
+	/* I/O: 0xF0000000–0xFFFFFFFF (covers all devices, no cache) */
+	mmu_map_tt	#1,#0xF0000000,#0x10000000,#_PAGE_NOCACHE030
+
+	jbra	L(mmu_init_done)
+L(notmackerel):
+#endif
 
 #ifdef CONFIG_AMIGA
 
@@ -1492,7 +1510,12 @@ L(cache68060):
 L(cache_not_680460):
 L(cache68030):
 	.chip	68030
+#ifdef CONFIG_MACKEREL
+	/* Mackerel only supports instruction cache at the moment */
+	movel	#CC3_CLR_I+CC3_ENABLE_I,%d0
+#else
 	movel	#CC3_ENABLE_DB+CC3_CLR_D+CC3_ENABLE_D+CC3_ENABLE_IB+CC3_CLR_I+CC3_ENABLE_I,%d0
+#endif
 	movec	%d0,%cacr
 
 	jra	L(cache_done)
@@ -3205,6 +3228,17 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 	movel L(virt_gf_tty_base),%a1
 	movel %d0,%a1@(GF_PUT_CHAR)
 1:
+#endif
+
+#ifdef CONFIG_MACKEREL
+	is_not_mackerel(2f)
+	/* XR68C681 Port B (console): SR=0xF0000013, THR=0xF0000017
+	 * Bootloader leaves DUART initialized; no serial_init needed. */
+1:	btst	#2,0xF0000013		| wait for TXRDY (bit 2 of Port B SR)
+	beq	1b
+	moveb	%d0,0xF0000017		| write char to Port B THR
+	jbra	L(serial_putc_done)
+2:
 #endif
 
 L(serial_putc_done):
