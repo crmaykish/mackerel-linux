@@ -1108,6 +1108,15 @@ config PATA_PLATFORM
 
 	  If unsure, say N.
 
+config PATA_MACKEREL
+	tristate "Mackerel-30 PATA support"
+	depends on M68K && ATA && ATA_SFF
+	help
+	  This option enables support for the memory-mapped IDE interface
+	  on the Mackerel-30 68030 single-board computer.
+
+	  If unsure, say N.
+
 config PATA_OF_PLATFORM
 	tristate "OpenFirmware platform device PATA support"
 	depends on OF
