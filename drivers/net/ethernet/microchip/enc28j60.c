@@ -1368,6 +1368,11 @@ static int enc28j60_net_close(struct net_device *dev)
 	enc28j60_hw_disable(priv);
 	enc28j60_lowpower(priv, true);
 	netif_stop_queue(dev);
+	cancel_work_sync(&priv->tx_work);
+	if (priv->tx_skb) {
+		dev_kfree_skb(priv->tx_skb);
+		priv->tx_skb = NULL;
+	}
 
 	return 0;
 }
@@ -1437,6 +1442,7 @@ static void enc28j60_restart_work_handler(struct work_struct *work)
 	rtnl_lock();
 	if (netif_running(ndev)) {
 		enc28j60_net_close(ndev);
+		msleep(200);
 		ret = enc28j60_net_open(ndev);
 		if (unlikely(ret)) {
 			netdev_info(ndev, "could not restart %d\n", ret);

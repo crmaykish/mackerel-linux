@@ -704,6 +704,17 @@ config SPI_MA35D1_QSPI
 	  The controller supports SPI memory devices such as SPI NOR and
 	  SPI NAND flashes in single, dual and quad I/O modes.
 
+config SPI_MACKEREL
+	tristate "Mackerel-30 bitbang SPI controller (DUART GPIO)"
+	depends on MACKEREL
+	select SPI_BITBANG
+	help
+	  Bitbang SPI controller for the Mackerel-30 homebrew 68030 SBC.
+	  Drives MOSI, SCLK, and CS lines through the XR68C681 DUART output
+	  port (OP2/OP3/OP4-6) and reads MISO from the input port (IP4).
+
+	  Say Y to enable SPI peripherals such as the ENC28J60 Ethernet chip.
+
 config SPI_MESON_SPICC
 	tristate "Amlogic Meson SPICC controller"
 	depends on COMMON_CLK
