@@ -1041,6 +1041,19 @@ config SERIAL_SCCNXP_CONSOLE
 	help
 	  Support for console on SCCNXP serial ports.
 
+config SERIAL_XR68C681
+	tristate "XR68C681 serial driver"
+	select SERIAL_CORE
+	help
+	  Driver for XR68C681 DUART
+
+config SERIAL_XR68C681_CONSOLE
+	bool "Console on XR68C681 serial port"
+	depends on SERIAL_XR68C681=y
+	select SERIAL_CORE_CONSOLE
+	help
+	  Enable support for using an XR68C681 port as the system console.
+
 config SERIAL_SC16IS7XX
 	tristate "NXP SC16IS7xx UART support"
 	depends on SPI_MASTER || I2C || COMPILE_TEST
