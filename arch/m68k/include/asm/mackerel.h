@@ -3,13 +3,23 @@
 
 #define MEM(address) (*(volatile unsigned char *)(address))
 
-// Timer
-#define TIMER_BASE 0xF0030000
-#define TIMER_ENABLE (TIMER_BASE + 0x00)
+#ifdef CONFIG_MACKEREL10
+// Mackerel-10 IRQ assignments
+#define IRQ_NUM_IDE   3
+#define IRQ_NUM_DUART 5
+#define IRQ_NUM_TIMER 6
+
+// Mackerel-10 DUART base
+#define DUART1_BASE 0xFF8000
+#else
+// Mackerel-30 Timer
+#define TIMER_BASE   0xF0030000
+#define TIMER_ENABLE  (TIMER_BASE + 0x00)
 #define TIMER_DISABLE (TIMER_BASE + 0x01)
 
-// DUART
+// Mackerel-30 DUART base
 #define DUART1_BASE 0xF0000000
+#endif
 #define DUART1_MR1A (DUART1_BASE + 0x01)
 #define DUART1_MR2A (DUART1_BASE + 0x01)
 #define DUART1_SRA (DUART1_BASE + 0x03)

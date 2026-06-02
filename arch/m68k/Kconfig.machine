@@ -4,10 +4,15 @@ comment "Machine Types"
 if M68KCLASSIC
 
 config MACKEREL
-    bool "Mackerel-30 board"
+	bool "Mackerel-30 board"
 	depends on MMU
 	select LEGACY_TIMER_TICK
-    default y
+	default y
+
+config MACKEREL10
+	bool "Mackerel-10 board (68010, NOMMU)"
+	depends on M68000
+	select LEGACY_TIMER_TICK
 
 config AMIGA
 	bool "Amiga support"

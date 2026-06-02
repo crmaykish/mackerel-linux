@@ -10,11 +10,12 @@
 
 # 68328, 68EZ328, 68VZ328
 
-obj-y			+= entry.o ints.o timers.o m68328.o
+obj-$(CONFIG_M68328)	+= entry.o ints.o timers.o m68328.o
 obj-$(CONFIG_ROM)	+= romvec.o
 
 obj-$(CONFIG_DRAGEN2)	+= dragen2.o
 obj-$(CONFIG_UCSIMM)	+= ucsimm.o
 obj-$(CONFIG_UCDIMM)	+= ucsimm.o
+obj-$(CONFIG_MACKEREL10)	+= entry.o mackerel/
 
 obj-y			+= head.o
