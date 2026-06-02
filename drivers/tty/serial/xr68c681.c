@@ -237,13 +237,6 @@ static int xr_startup(struct uart_port *port)
 {
 	struct xr_port *xp = container_of(port, struct xr_port, port);
 
-	/* Initialize to 8N1 115200 (extended BRG Set 2) — matches the
-	 * bootloader for Port B, and gives Port A a clean known state.
-	 * set_termios will reprogram to whatever userspace requests. */
-	acr_shadow |= XR_ACR_BRG_SET2;
-	xr_writeb(DUART1_ACR, acr_shadow);
-	xr_port_program(xp, XR_MR1_8BIT | XR_MR1_NO_PARITY, XR_MR2_1STOP,
-			0x8, true);
 	imr_shadow |= xp->rx_imr_bit;
 	xr_writeb(DUART1_IMR, imr_shadow);
 	return 0;
@@ -453,6 +446,14 @@ static int xr_probe(struct platform_device *pdev)
 	 */
 	xr_writeb(DUART1_IVR, 0x45);
 
+	/* Register IRQ handler before uart_add_one_port so it is live when
+	 * xr_startup enables interrupts during console port initialization. */
+	ret = request_irq(irq, xr_isr, 0, XR_NAME, xr_ports);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to request IRQ %d\n", irq);
+		return ret;
+	}
+
 	for (i = 0; i < XR_NR_PORTS; i++) {
 		struct xr_port *xp = &xr_ports[i];
 		struct uart_port *port = &xp->port;
@@ -474,19 +475,12 @@ static int xr_probe(struct platform_device *pdev)
 		ret = uart_add_one_port(&xr_uart_driver, port);
 		if (ret) {
 			dev_err(&pdev->dev, "uart_add_one_port(%d) failed: %d\n", i, ret);
+			free_irq(irq, xr_ports);
 			while (--i >= 0)
 				uart_remove_one_port(&xr_uart_driver,
 						     &xr_ports[i].port);
 			return ret;
 		}
-	}
-
-	ret = request_irq(irq, xr_isr, 0, XR_NAME, xr_ports);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to request IRQ %d\n", irq);
-		for (i = 0; i < XR_NR_PORTS; i++)
-			uart_remove_one_port(&xr_uart_driver, &xr_ports[i].port);
-		return ret;
 	}
 
 	/* Enable Port B RX interrupt for console input; Port A enabled on open. */
@@ -525,6 +519,18 @@ static int __init xr_init(void)
 		pr_err("%s: failed to register UART driver\n", XR_NAME);
 		return ret;
 	}
+
+	/*
+	 * Default a fresh open of /dev/ttyXR* to 115200 8N1 with CLOCAL set, so
+	 * (a) opening the port doesn't block in tty_port_block_til_ready waiting
+	 * for carrier, and (b) the baud matches the console (a plain open would
+	 * otherwise inherit B38400 and garble the link). This is what a userspace
+	 * "exec sh </dev/ttyXR0" relies on.
+	 */
+	xr_uart_driver.tty_driver->init_termios.c_cflag =
+		B115200 | CS8 | CREAD | CLOCAL | HUPCL;
+	xr_uart_driver.tty_driver->init_termios.c_ispeed = 115200;
+	xr_uart_driver.tty_driver->init_termios.c_ospeed = 115200;
 
 	ret = platform_driver_register(&xr_plat_driver);
 	if (ret) {
