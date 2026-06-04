@@ -12,6 +12,7 @@
 #include <asm/mackerel.h>
 #include <asm/traps.h>
 #include <asm/irq.h>
+#include <linux/platform_data/pata_mackerel.h>
 
 extern void legacy_timer_tick(unsigned long ticks);
 
@@ -117,6 +118,44 @@ static struct platform_device xr68c681_device = {
 	.resource     = uart_res,
 };
 
+#ifdef CONFIG_MACKEREL10
+static struct resource ide_res[] = {
+	{
+		/* Command block (CS0): 8 regs at 2-byte stride */
+		.start = IDE_BASE,
+		.end   = IDE_BASE + 0x0F,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		/* Control block (CS1): alt status / device control register */
+		.start = IDE_CTL_BASE,
+		.end   = IDE_CTL_BASE + 0x01,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		/* Autovector level 3 — CPLD raises IPL=3 on drive INTRQ */
+		.start = IRQ_NUM_IDE,
+		.end   = IRQ_NUM_IDE,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct pata_mackerel_pdata ide_pdata = {
+	// No databus bit reversal like Mackerel-30
+	.low_byte_bitrev = false,
+};
+
+static struct platform_device ide_device = {
+	.name          = "pata-mackerel",
+	.id            = -1,
+	.num_resources = ARRAY_SIZE(ide_res),
+	.resource      = ide_res,
+	.dev = {
+		.platform_data = &ide_pdata,
+	},
+};
+#endif
+
 extern void mackerel_addr_err(void);
 extern void mackerel_bus_err(void);
 
@@ -142,6 +181,10 @@ static int __init mackerel_platform_init(void)
 {
 	if (platform_device_register(&xr68c681_device))
 		panic("Could not register DUART device");
+#ifdef CONFIG_MACKEREL10
+	if (platform_device_register(&ide_device))
+		pr_err("Mackerel-10: could not register IDE device\n");
+#endif
 	return 0;
 }
 arch_initcall(mackerel_platform_init);

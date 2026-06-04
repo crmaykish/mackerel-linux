@@ -1,16 +1,20 @@
 /*
- * PATA driver for the Mackerel-30 memory-mapped IDE interface.
+ * PATA driver for the Mackerel memory-mapped IDE interface.
  *
- * The Mackerel-30 connects two 74HC245 bus transceivers between the 68030
- * data bus and the IDE cable. The upper byte (IDE D8-D15 -> m68k D24-D31)
- * is wired straight through. The lower byte (IDE D0-D7 -> m68k D16-D23)
- * has its bit order reversed: IDE D0 lands on m68k D23, IDE D7 on m68k D16.
+ * Shared by the Mackerel boards, which differ only in how the IDE cable is
+ * wired to the 680x0 data bus (see struct pata_mackerel_pdata):
  *
- * 8-bit register accesses use only the upper byte lane and are unaffected.
- * 16-bit data port transfers require per-word reversal of the low byte.
+ *   Mackerel-30 connects two 74HC245 bus transceivers. The upper byte
+ *   (IDE D8-D15 -> m68k D24-D31) is straight through; the lower byte
+ *   (IDE D0-D7 -> m68k D16-D23) has its bit order reversed: IDE D0 lands on
+ *   m68k D23, IDE D7 on m68k D16. 8-bit register accesses use only the upper
+ *   byte lane and are unaffected, but 16-bit data port transfers and the
+ *   device-control register need per-byte reversal in software. This will be
+ *   corrected in a future board revision; for now the driver compensates.
  *
- * This issue will be corrected in a future board revision, but for now we implement the necessary quirks in this driver.
- * 
+ *   Mackerel-10 wires the bus straight through, so plain byte/word accesses
+ *   work and no reversal is needed.
+ *
  * Copyright (C) 2026 Colin Maykish <crmaykish@protonmail.com>
  * Based on pata_platform.c by Paul Mundt.
  * GPL v2.
@@ -21,6 +25,7 @@
 #include <linux/ata.h>
 #include <linux/libata.h>
 #include <linux/platform_device.h>
+#include <linux/platform_data/pata_mackerel.h>
 #include <linux/bitrev.h>
 #include <scsi/scsi_host.h>
 
@@ -30,9 +35,19 @@
 /* IDE registers are at 2-byte stride (A1 selects the register). */
 #define MACKEREL_IDE_SHIFT 1
 
-static inline void mackerel_write_devctl(void __iomem *ctl_addr, u8 ctl)
+static inline bool mackerel_bitrev(struct ata_port *ap)
 {
-	__raw_writew(bitrev8(ctl), ctl_addr);
+	const struct pata_mackerel_pdata *pdata = ap->host->private_data;
+
+	return pdata && pdata->low_byte_bitrev;
+}
+
+static inline void mackerel_write_devctl(struct ata_port *ap, u8 ctl)
+{
+	if (mackerel_bitrev(ap))
+		__raw_writew(bitrev8(ctl), ap->ioaddr.ctl_addr);
+	else
+		__raw_writeb(ctl, ap->ioaddr.ctl_addr);
 }
 
 static int pata_mackerel_set_mode(struct ata_link *link,
@@ -66,7 +81,7 @@ static void mackerel_sff_set_devctl(struct ata_port *ap, u8 ctl)
 	 * m68k it calls cpu_to_le16 which swaps the bytes, landing data on
 	 * the wrong lane.
 	 */
-	mackerel_write_devctl(ap->ioaddr.ctl_addr, ctl);
+	mackerel_write_devctl(ap, ctl);
 }
 
 static int mackerel_softreset(struct ata_link *link, unsigned int *classes,
@@ -78,9 +93,9 @@ static int mackerel_softreset(struct ata_link *link, unsigned int *classes,
 
 	ap->ops->sff_dev_select(ap, 0);
 
-	mackerel_write_devctl(ap->ioaddr.ctl_addr, ap->ctl); udelay(20);
-	mackerel_write_devctl(ap->ioaddr.ctl_addr, ap->ctl | ATA_SRST); udelay(20);
-	mackerel_write_devctl(ap->ioaddr.ctl_addr, ap->ctl);
+	mackerel_write_devctl(ap, ap->ctl); udelay(20);
+	mackerel_write_devctl(ap, ap->ctl | ATA_SRST); udelay(20);
+	mackerel_write_devctl(ap, ap->ctl);
 	ap->last_ctl = ap->ctl;
 
 	rc = ata_sff_wait_after_reset(link, 1, deadline);
@@ -102,26 +117,21 @@ static unsigned int mackerel_sff_data_xfer(struct ata_queued_cmd *qc,
 	struct ata_port *ap = qc->dev->link->ap;
 	void __iomem *data = ap->ioaddr.data_addr;
 	unsigned int words = buflen >> 1;
+	bool rev = mackerel_bitrev(ap);
 	u16 *buf16 = (u16 *)buf;
 	unsigned int i;
 
-	/*
-	 * Use __raw_readw / __raw_writew (= out_be16 / in_be16, no byteswap).
-	 * ioread16/iowrite16 call cpu_to_le16/le16_to_cpu which swap the bytes
-	 * on big-endian m68k, putting the high/low IDE bytes on the wrong lanes.
-	 * With __raw_readw the layout is: high byte = D31:D24 = IDE D15:D8,
-	 * low byte = D23:D16 = bitrev8(IDE D0:D7) — exactly what the formulas
-	 * below expect.
-	 */
 	if (rw == READ) {
 		for (i = 0; i < words; i++) {
 			u16 w = __raw_readw(data);
-			buf16[i] = (w & 0xFF00) | bitrev8(w & 0xFF);
+			buf16[i] = rev ? ((w & 0xFF00) | bitrev8(w & 0xFF)) : w;
 		}
 	} else {
 		for (i = 0; i < words; i++) {
 			u16 w = buf16[i];
-			__raw_writew((w & 0xFF00) | bitrev8(w & 0xFF), data);
+			if (rev)
+				w = (w & 0xFF00) | bitrev8(w & 0xFF);
+			__raw_writew(w, data);
 		}
 	}
 
@@ -129,9 +139,10 @@ static unsigned int mackerel_sff_data_xfer(struct ata_queued_cmd *qc,
 	if (buflen & 1) {
 		if (rw == READ) {
 			u16 w = __raw_readw(data);
-			buf[buflen - 1] = bitrev8(w & 0xFF);
+			buf[buflen - 1] = rev ? bitrev8(w & 0xFF) : (w & 0xFF);
 		} else {
-			__raw_writew(bitrev8(buf[buflen - 1]), data);
+			u8 b = buf[buflen - 1];
+			__raw_writew(rev ? bitrev8(b) : b, data);
 		}
 	}
 
@@ -226,6 +237,9 @@ static int pata_mackerel_probe(struct platform_device *pdev)
 	if (!host)
 		return -ENOMEM;
 
+	// Board wiring quirks (NULL pdata => straight wiring, no bitrev).
+	host->private_data = dev_get_platdata(&pdev->dev);
+
 	ap = host->ports[0];
 	ap->ops = &pata_mackerel_port_ops;
 
@@ -247,10 +261,16 @@ static int pata_mackerel_probe(struct platform_device *pdev)
 	}
 
 	/*
-	 * Treat ALTSTATUS as unavailable for now.
-	 * CTL readback is unreliable on this wiring and can mislead IRQ logic.
+	 * On Mackerel-30 the CTL read-back is unreliable on the bit-reversed
+	 * wiring and can mislead the IRQ logic, so ALTSTATUS is left
+	 * unavailable. Mackerel-10 wires it straight, so alt status (which
+	 * shares the device-control register) can be polled normally.
 	 */
-	ap->ioaddr.altstatus_addr = NULL;
+	if (host->private_data &&
+	    ((struct pata_mackerel_pdata *)host->private_data)->low_byte_bitrev)
+		ap->ioaddr.altstatus_addr = NULL;
+	else
+		ap->ioaddr.altstatus_addr = ap->ioaddr.ctl_addr;
 
 	pata_mackerel_setup_port(&ap->ioaddr);
 
@@ -275,7 +295,7 @@ static struct platform_driver pata_mackerel_driver = {
 module_platform_driver(pata_mackerel_driver);
 
 MODULE_AUTHOR("Colin Maykish <crmaykish@protonmail.com>");
-MODULE_DESCRIPTION("Mackerel-30 PATA driver");
+MODULE_DESCRIPTION("Mackerel PATA driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_ALIAS("platform:" DRV_NAME);

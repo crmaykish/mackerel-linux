@@ -17,6 +17,7 @@
 #include <linux/ioport.h>
 #include <linux/serial_core.h>
 #include <linux/platform_data/serial-xr68c681.h>
+#include <linux/platform_data/pata_mackerel.h>
 
 static void mackerel_console_write(struct console *co, const char *s,
 				   unsigned int count)
@@ -88,11 +89,19 @@ static struct resource ide_res[] = {
 	},
 };
 
+static struct pata_mackerel_pdata ide_pdata = {
+	// Low byte is bit-reversed due to hardware bug
+	.low_byte_bitrev = true,
+};
+
 static struct platform_device ide_dev = {
 	.name          = "pata-mackerel",
 	.id            = -1,
 	.num_resources = ARRAY_SIZE(ide_res),
 	.resource      = ide_res,
+	.dev = {
+		.platform_data = &ide_pdata,
+	},
 };
 
 /* SPI: bitbang through DUART OP/IP pins; share DUART base with xr68c681 */

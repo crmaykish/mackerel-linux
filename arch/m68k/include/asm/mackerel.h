@@ -14,6 +14,8 @@
 #define IRQ_NUM_DUART 5
 #define IRQ_NUM_TIMER 6
 #define DUART1_BASE 0xFF8000
+#define IDE_BASE     0xFFC000	// command block (CS0)
+#define IDE_CTL_BASE 0xFF400C	// control block (CS1): alt status / device control
 
 #else   // Mackerel-30
 #define MACKEREL_BOARD_NAME "Mackerel-30"
@@ -23,6 +25,8 @@
 #define TIMER_ENABLE  (TIMER_BASE + 0x00)
 #define TIMER_DISABLE (TIMER_BASE + 0x01)
 #define DUART1_BASE 0xF0000000
+#define IDE_BASE     0xF0010000
+#define IDE_CTL_BASE 0xF0020000
 #endif
 
 #define DUART1_MR1A (DUART1_BASE + 0x01)
@@ -51,10 +55,6 @@
 #define DUART1_OPCR (DUART1_BASE + 0x1B)
 #define DUART1_OPR (DUART1_BASE + 0x1D)
 #define DUART1_OPR_RESET (DUART1_BASE + 0x1F)
-
-// IDE
-#define IDE_BASE     0xF0010000
-#define IDE_CTL_BASE 0xF0020000
 
 // Interrupt bits
 #define DUART_INTR_COUNTER 0b00001000
