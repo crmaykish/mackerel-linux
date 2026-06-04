@@ -1,95 +1,65 @@
 #!/usr/bin/env bash
-# Build a dynamically linked BusyBox binary for m68k-mackerel-linux-musl.
-# Output: ./busybox in the repo root.
+# Compile the appropriate busybox binary for the chosen Mackerel board
+# .config files are in busybox_configs/
 set -e
 
+BOARD="${1:-30}"
 BUSYBOX_VERSION=1.36.1
 BUSYBOX_URL="https://busybox.net/downloads/busybox-${BUSYBOX_VERSION}.tar.bz2"
-
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-BUILD_DIR="$(mktemp -d /tmp/busybox-build.XXXXXX)"
-CROSS=m68k-mackerel-linux-musl-
+
+case "$BOARD" in
+    30) SYSTEM=m68k-mackerel-linux-musl     ; LINK=dynamic ; OUT="$SCRIPT_DIR/busybox" ;;
+    10) SYSTEM=m68k-mackerel-uclinux-uclibc ; LINK=bflt    ; OUT="$SCRIPT_DIR/busybox_nommu" ;;
+    08) SYSTEM=m68k-mackerel-uclinux-uclibc ; LINK=bflt    ; OUT="$SCRIPT_DIR/busybox_mackerel08" ;;
+    *)  echo "Usage: $0 [board]   (board: 30, 10, or 08; default 30)"; exit 1 ;;
+esac
+
+export PATH=$PATH:$HOME/x-tools/"$SYSTEM"/bin
+CROSS="$SYSTEM-"
+DEFCONFIG="$SCRIPT_DIR/busybox_configs/mackerel${BOARD}_defconfig"
+BUILD_DIR="$SCRIPT_DIR/.busybox-${BOARD}-build"
+
+if [ ! -f "$DEFCONFIG" ]; then
+    echo "Error: $DEFCONFIG not found"
+    exit 1
+fi
 
 cleanup() { rm -rf "$BUILD_DIR"; }
 trap cleanup EXIT
 
-export PATH=$PATH:~/x-tools/m68k-mackerel-linux-musl/bin
+# Fetch (cached) and unpack — busybox.net is slow, so cache the tarball
+CACHE_DIR="$HOME/src"
+TARBALL="busybox-${BUSYBOX_VERSION}.tar.bz2"
+mkdir -p "$CACHE_DIR"
+if ! bzip2 -t "$CACHE_DIR/$TARBALL" 2>/dev/null; then
+    echo "Downloading BusyBox ${BUSYBOX_VERSION}..."
+    wget -c -q --show-progress -O "$CACHE_DIR/$TARBALL" "$BUSYBOX_URL"
+fi
 
-echo "[*] Downloading BusyBox ${BUSYBOX_VERSION}..."
-cd "$BUILD_DIR"
-wget -q --show-progress "$BUSYBOX_URL"
-tar xf "busybox-${BUSYBOX_VERSION}.tar.bz2"
-cd "busybox-${BUSYBOX_VERSION}"
+echo "Preparing build directory..."
+rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"; cd "$BUILD_DIR"
+cp "$CACHE_DIR/$TARBALL" .; tar xf "$TARBALL"; cd "busybox-${BUSYBOX_VERSION}"
 
-echo "[*] Configuring..."
-make ARCH=m68k CROSS_COMPILE="$CROSS" defconfig
+echo "Applying mackerel${BOARD}_defconfig..."
+cp "$DEFCONFIG" "configs/mackerel${BOARD}_defconfig"
+make ARCH=m68k CROSS_COMPILE="$CROSS" "mackerel${BOARD}_defconfig"
 
-# Helpers to set/enable/disable Kconfig options in .config
-cfg_enable()  {
-    local o="$1"
-    if grep -q "^# CONFIG_${o} is not set" .config; then
-        sed -i "s|^# CONFIG_${o} is not set|CONFIG_${o}=y|" .config
-    elif grep -q "^CONFIG_${o}=" .config; then
-        sed -i "s|^CONFIG_${o}=.*|CONFIG_${o}=y|" .config
-    else
-        echo "CONFIG_${o}=y" >> .config
-    fi
-}
-cfg_disable() {
-    local o="$1"
-    if grep -q "^CONFIG_${o}=" .config; then
-        sed -i "s|^CONFIG_${o}=.*|# CONFIG_${o} is not set|" .config
-    fi
-}
-cfg_str() {
-    local o="$1" v="$2"
-    if grep -q "^CONFIG_${o}=" .config; then
-        sed -i "s|^CONFIG_${o}=.*|CONFIG_${o}=\"${v}\"|" .config
-    else
-        echo "CONFIG_${o}=\"${v}\"" >> .config
-    fi
-}
+if [ "$LINK" = "dynamic" ]; then
+    echo "Building..."
+    make ARCH=m68k CROSS_COMPILE="$CROSS" -j"$(nproc)"
+    cp busybox "$OUT"
+    "${CROSS}strip" "$OUT"
+else
+    echo "Building busybox_unstripped (cross-strip mishandles bFLT)..."
+    make ARCH=m68k CROSS_COMPILE="$CROSS" -j"$(nproc)" busybox_unstripped
+    file busybox_unstripped | grep -q "BFLT" || {
+        echo "ERROR: busybox_unstripped is not bFLT!"; file busybox_unstripped; exit 1; }
+    cp busybox_unstripped "$OUT"
+    [ -f busybox_unstripped.gdb ] && cp busybox_unstripped.gdb "$OUT.gdb"
+fi
 
-# Dynamic linking
-cfg_disable STATIC
-cfg_disable STATIC_LIBGCC
-
-cfg_enable UDHCPC
-cfg_enable UDHCPC6
-cfg_enable FEATURE_UDHCPC_ARPING
-cfg_str    UDHCPC_DEFAULT_SCRIPT "/usr/share/udhcpc/default.script"
-cfg_enable ROUTE
-cfg_enable IP
-cfg_enable ARPING
-cfg_enable TRACEROUTE
-cfg_enable TRACEROUTE6
-cfg_enable NSLOOKUP
-cfg_enable ARP
-cfg_enable NC
-cfg_enable WGET
-cfg_enable PING
-cfg_enable RDATE
-cfg_enable SYSLOGD
-cfg_enable KLOGD
-
-# Disable applets that fail to build against musl headers
-cfg_disable TC
-
-# Sync config defaults for any new dependencies
-yes "" | make ARCH=m68k CROSS_COMPILE="$CROSS" oldconfig
-
-# oldconfig reverts options that differ from defconfig defaults back to n when
-# answered by `yes ""` — re-apply anything that must survive the pass.
-cfg_disable STATIC
-cfg_disable TC
-
-echo "[*] Building..."
-make ARCH=m68k CROSS_COMPILE="$CROSS" -j"$(nproc)"
-
-echo "[*] Copying output..."
-cp busybox "$SCRIPT_DIR/busybox"
-"${CROSS}strip" "$SCRIPT_DIR/busybox"
-
-echo
-echo "[+] Done: $SCRIPT_DIR/busybox"
-"${CROSS}size" "$SCRIPT_DIR/busybox" 2>/dev/null || true
+echo "Done: $OUT"
+file "$OUT"
+ls -lh "$OUT"
+"${CROSS}size" "$OUT" 2>/dev/null || true
