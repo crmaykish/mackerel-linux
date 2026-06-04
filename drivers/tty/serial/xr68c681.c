@@ -431,24 +431,19 @@ static int xr_probe(struct platform_device *pdev)
 		return irq;
 	}
 
-	/* Mask all DUART interrupts and drain both RX FIFOs. */
-	imr_shadow = 0x00;
-	acr_shadow = 0x00;
+	// Preserve the important bits in the DUART registers (only relevant on Mackerel-08)
+	imr_shadow = DUART_IMR_RESERVED;
+	acr_shadow = DUART_ACR_RESERVED;
 	xr_writeb(DUART1_IMR, imr_shadow);
 	while (xr_readb(DUART1_SRA) & XR_SR_RXRDY)
 		(void)xr_readb(DUART1_RBA);
 	while (xr_readb(DUART1_SRB) & XR_SR_RXRDY)
 		(void)xr_readb(DUART1_RBB);
 
-	/*
-	 * Program IVR so the DUART drives vector 0x45 on IACK.
-	 * VEC_USER (0x40) + IRQ level 5 = 0x45.
-	 */
-	xr_writeb(DUART1_IVR, 0x45);
+	xr_writeb(DUART1_IVR, 0x40 + IRQ_NUM_DUART);
 
-	/* Register IRQ handler before uart_add_one_port so it is live when
-	 * xr_startup enables interrupts during console port initialization. */
-	ret = request_irq(irq, xr_isr, 0, XR_NAME, xr_ports);
+	// Request the DUART interrupt as SHARED because Mackerel-08 uses it for the timer as well 
+	ret = request_irq(irq, xr_isr, IRQF_SHARED, XR_NAME, xr_ports);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request IRQ %d\n", irq);
 		return ret;
@@ -483,8 +478,9 @@ static int xr_probe(struct platform_device *pdev)
 		}
 	}
 
-	/* Enable Port B RX interrupt for console input; Port A enabled on open. */
-	imr_shadow = XR_ISR_RXRDY_B;
+	// Enable port B interrupt so console input works
+	// Note: port A interrupts are enabled when the port is opened
+	imr_shadow |= XR_ISR_RXRDY_B;
 	xr_writeb(DUART1_IMR, imr_shadow);
 
 	dev_info(&pdev->dev, "XR68C681 at 0x%llx IRQ %d\n",
@@ -496,7 +492,9 @@ static void xr_remove(struct platform_device *pdev)
 {
 	int i;
 
-	xr_writeb(DUART1_IMR, 0x00);
+	// Drop Rx/Tx bits, but keep reserved timer bits enabled
+	imr_shadow = DUART_IMR_RESERVED;
+	xr_writeb(DUART1_IMR, imr_shadow);
 	free_irq(xr_ports[0].port.irq, xr_ports);
 	for (i = 0; i < XR_NR_PORTS; i++)
 		uart_remove_one_port(&xr_uart_driver, &xr_ports[i].port);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Mackerel-10 board init and early console
+// Mackerel-08/10 board init, timer, and early console
 
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -15,12 +15,29 @@
 
 extern void legacy_timer_tick(unsigned long ticks);
 
-static unsigned long tick_count;
+#ifdef CONFIG_MACKEREL08
+// Mackerel-08 has no timer chip; the XR68C681 counter/timer is the system tick.
+// It shares the DUART IRQ with the serial port, so the handler is shared and
+// ticks only when the counter-ready bit is set.
+#define DUART_XTAL_HZ	3686400UL
+#define TIMER_CLK_HZ	(DUART_XTAL_HZ / 16)	/* ACR[6:4]=111: X1/CLK / 16 */
 
-static irqreturn_t hw_tick(int irq, void *dummy)
+// Mackerel-08 DUART interrupts fire once per cycle, so the preset is for half the desired tick rate
+// Timer is configured for 50 Hz
+// Note: the poor 68008 cannot keep up with higher interrupt rates
+#define TIMER_PRESET	(TIMER_CLK_HZ / (2 * HZ))
+
+static int mackerel_timer_id;
+
+static irqreturn_t mackerel_timer_isr(int irq, void *dev_id)
 {
+	if (!(MEM(DUART1_ISR) & DUART_INTR_COUNTER))
+	{
+		return IRQ_NONE;
+	}
+
+	MEM(DUART1_OPR_RESET);
 	legacy_timer_tick(1);
-	tick_count++;
 	return IRQ_HANDLED;
 }
 
@@ -28,13 +45,36 @@ static void mackerel_sched_init(void)
 {
 	int ret;
 
-	pr_info("Mackerel-10: timer on IRQ%d (PLD, autovectored)\n",
-		IRQ_NUM_TIMER);
+	// Set up DUART timer mode
+	MEM(DUART1_ACR) = DUART_ACR_RESERVED;
+	MEM(DUART1_CUR) = (TIMER_PRESET >> 8) & 0xFF;
+	MEM(DUART1_CLR) = TIMER_PRESET & 0xFF;
+	MEM(DUART1_IMR) = DUART_INTR_COUNTER;
+	// Start the timer
+	MEM(DUART1_OPR);
+
+	ret = request_irq(IRQ_NUM_DUART, mackerel_timer_isr, IRQF_SHARED,
+			  "mackerel-timer", &mackerel_timer_id);
+	if (ret) {
+		pr_err("Mackerel-08: cannot get timer IRQ: %d\n", ret);
+	}
+}
+#else // Mackerel-10
+static irqreturn_t hw_tick(int irq, void *dummy)
+{
+	legacy_timer_tick(1);
+	return IRQ_HANDLED;
+}
+
+static void mackerel_sched_init(void)
+{
+	int ret;
 
 	ret = request_irq(IRQ_NUM_TIMER, hw_tick, IRQF_TIMER, "timer", NULL);
 	if (ret)
-		pr_err("Mackerel-10: failed to request timer IRQ: %d\n", ret);
+		pr_err("Mackerel-10: cannot get timer IRQ: %d\n", ret);
 }
+#endif
 
 static void mackerel_console_write(struct console *co, const char *str,
 				   unsigned int count)
@@ -82,20 +122,14 @@ extern void mackerel_bus_err(void);
 
 void __init config_BSP(char *command, int len)
 {
-	pr_info("Mackerel-10 support by Colin Maykish <crmaykish@protonmail.com>\n");
+	pr_info(MACKEREL_BOARD_NAME " support by Colin Maykish <crmaykish@protonmail.com>\n");
 
-	/*
-	 * Install bus/address error handlers immediately so any fault during
-	 * the rest of setup_arch() goes through the kernel panic path rather
-	 * than the bootloader's handler.  trap_init() will overwrite these
-	 * again later along with the full vector table.
-	 */
+	// Set up some early exception handlers
 	_ramvec[2] = (e_vector)mackerel_bus_err;
 	_ramvec[3] = (e_vector)mackerel_addr_err;
 
-	/* Disable all DUART interrupts initially; serial driver will re-enable */
+	// Disable DUART interrupts, let the driver set them up later
 	MEM(DUART1_IMR) = 0;
-	/* Set DUART interrupt vector so IACK cycles return the right vector */
 	MEM(DUART1_IVR) = 0x40 + IRQ_NUM_DUART;
 
 	mach_reset     = mackerel_reset;

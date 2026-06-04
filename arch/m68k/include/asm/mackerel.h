@@ -3,23 +3,28 @@
 
 #define MEM(address) (*(volatile unsigned char *)(address))
 
-#ifdef CONFIG_MACKEREL10
-// Mackerel-10 IRQ assignments
+#ifdef CONFIG_MACKEREL08
+#define MACKEREL_BOARD_NAME "Mackerel-08"
+#define IRQ_NUM_DUART 1		// DUART on IPL1
+#define DUART1_BASE 0x3FC000
+
+#elif defined(CONFIG_MACKEREL10)
+#define MACKEREL_BOARD_NAME "Mackerel-10"
 #define IRQ_NUM_IDE   3
 #define IRQ_NUM_DUART 5
 #define IRQ_NUM_TIMER 6
-
-// Mackerel-10 DUART base
 #define DUART1_BASE 0xFF8000
-#else
+
+#else   // Mackerel-30
+#define MACKEREL_BOARD_NAME "Mackerel-30"
+#define IRQ_NUM_DUART 5
 // Mackerel-30 Timer
 #define TIMER_BASE   0xF0030000
 #define TIMER_ENABLE  (TIMER_BASE + 0x00)
 #define TIMER_DISABLE (TIMER_BASE + 0x01)
-
-// Mackerel-30 DUART base
 #define DUART1_BASE 0xF0000000
 #endif
+
 #define DUART1_MR1A (DUART1_BASE + 0x01)
 #define DUART1_MR2A (DUART1_BASE + 0x01)
 #define DUART1_SRA (DUART1_BASE + 0x03)
@@ -54,6 +59,18 @@
 // Interrupt bits
 #define DUART_INTR_COUNTER 0b00001000
 #define DUART_INTR_RXRDY 0b00100000
+
+// Mackerel-08 serial interrupts and timer interrupts both come from the same DUART pin
+// so we need to preserve IMR and ACR register bits during the timer tick
+#ifdef CONFIG_MACKEREL08
+#define DUART_IMR_RESERVED DUART_INTR_COUNTER
+#define DUART_ACR_RESERVED 0x70
+
+// The other Mackere boards have separate timer and serial interrupt lines, so not important
+#else
+#define DUART_IMR_RESERVED 0
+#define DUART_ACR_RESERVED 0
+#endif
 
 // DUART
 void duart_putc(char c);

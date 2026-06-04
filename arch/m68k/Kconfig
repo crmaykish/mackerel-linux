@@ -74,6 +74,7 @@ config NO_IOPORT_MAP
 config HZ
 	int
 	default 1000 if CLEOPATRA
+	default 50 if MACKEREL08
 	default 100
 
 config PGTABLE_LEVELS
