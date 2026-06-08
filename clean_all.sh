@@ -8,7 +8,7 @@ echo "Kernel image"
 rm -f image.bin
 
 echo "Filesystem images"
-rm -f romfs.img sd.img
+rm -f romfs.img sd.img rom08.bin
 
 echo "BusyBox binaries"
 rm -f busybox busybox_mackerel08 busybox_nommu

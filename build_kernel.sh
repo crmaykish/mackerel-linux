@@ -59,9 +59,6 @@ make ARCH=m68k CROSS_COMPILE="$CROSS" -j"$(nproc)"
 echo "Create image..."
 "${CROSS}"objcopy -O binary vmlinux image.bin
 
-# Mackerel-08 needs ROMfs appended to the kernel image
-if [ "$BOARD" = "08" ]; then
-    append_romfs
-fi
+# NOTE: Mackerel-08 includes its ROMfs in the 512KB Flash ROM, not in the kernel image
 
 echo "Done! Image size: $(du -h image.bin | cut -f1)"

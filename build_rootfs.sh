@@ -320,7 +320,10 @@ build_rootfs_08() {
     cp "$BUSYBOX" "$STAGE/bin/busybox"; chmod 755 "$STAGE/bin/busybox"
 
     for cmd in sh echo cat ls mkdir rm rmdir cp mv ln pwd mount umount ps kill \
-               uname dmesg sleep free clear true false test halt poweroff reboot; do
+               uname dmesg sleep free clear true false test halt poweroff reboot \
+               grep egrep fgrep sed find xargs dd \
+               head tail wc sort cut tr date df touch printf \
+               chmod chown du hexdump od strings top mknod mkfifo; do
         ln -sf busybox "$STAGE/bin/$cmd"
     done
 
@@ -343,7 +346,30 @@ EOF
     echo "Building romfs image..."
     genromfs -d "$STAGE" -f "$OUT" -V 'mackerel08'
 
+    assemble_rom08 "$OUT"
+
     echo "Done!"
+}
+
+# Combine the bootloader.bin and ROMfs image into a single bin file for flashing
+assemble_rom08() {
+    local ROMFS="$1"
+    local FW_DIR="${SCRIPT_DIR}/../mackerel-68k/firmware"
+    local BL="$FW_DIR/bootloader.bin"
+    local ROM_SIZE=524288 # 512K
+    local OUT="$SCRIPT_DIR/rom08.bin"
+
+    if [ ! -f "$FW_DIR/bootloader.bin" ]; then
+        echo "ERROR: $FW_DIR/bootloader.bin not found. Build the Mackerel-08 bootloader first..."
+        exit 1
+    fi
+
+    echo "Combining bootloader and ROMfs..."
+    dd if=/dev/zero of="$OUT" bs=4096 count=$((ROM_SIZE / 4096)) status=none
+    dd if="$BL" of="$OUT" conv=notrunc bs=4096 status=none
+    dd if="$ROMFS" of="$OUT" conv=notrunc bs=4096 seek=16 status=none
+    
+    echo "Flash $OUT with minipro."
 }
 
 build_rootfs_"${BOARD}"
