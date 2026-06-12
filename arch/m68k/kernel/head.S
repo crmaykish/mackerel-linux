@@ -1518,12 +1518,7 @@ L(cache68060):
 L(cache_not_680460):
 L(cache68030):
 	.chip	68030
-#ifdef CONFIG_MACKEREL
-	/* Mackerel only supports instruction cache at the moment */
-	movel	#CC3_CLR_I+CC3_ENABLE_I,%d0
-#else
 	movel	#CC3_ENABLE_DB+CC3_CLR_D+CC3_ENABLE_D+CC3_ENABLE_IB+CC3_CLR_I+CC3_ENABLE_I,%d0
-#endif
 	movec	%d0,%cacr
 
 	jra	L(cache_done)
