@@ -4,17 +4,14 @@ set -e
 echo "Distclean"
 make distclean
 
-echo "Kernel image"
-rm -f image.bin
+echo "Artifacts"
+rm -f *.img *.bin *.gdb
 
-echo "Filesystem images"
-rm -f romfs.img sd.img rom08.bin
-
-echo "BusyBox binaries"
+echo "BusyBox"
 rm -f busybox busybox_mackerel08 busybox_nommu
 
 echo "Filesystems"
-sudo rm -rf rootfs_mackerel30 romfs_mackerel08 romfs_mackerel30 \
+sudo rm -rf rootfs_mackerel30 romfs_mackerel08 romfs_mackerel10 \
         initramfs initramfs.list
 
 echo "BusyBox scratch build dirs"
