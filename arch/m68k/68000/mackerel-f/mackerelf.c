@@ -6,14 +6,14 @@
 
 void uart16550_putc(char c)
 {
-	while ((MEM(UART_LSR) & LSR_THRE) == 0) {}
-	MEM(UART_THR) = c;
+	while ((MEM(MF_UART_LSR) & MF_LSR_THRE) == 0) {}
+	MEM(MF_UART_THR) = c;
 	if (c == '\n')
 		uart16550_putc('\r');
 }
 
 char uart16550_getc(void)
 {
-	while ((MEM(UART_LSR) & LSR_DR) == 0) {}
-	return MEM(UART_RBR);
+	while ((MEM(MF_UART_LSR) & MF_LSR_DR) == 0) {}
+	return MEM(MF_UART_RBR);
 }

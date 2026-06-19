@@ -12,7 +12,8 @@ case "$BOARD" in
     30) SYSTEM=m68k-mackerel-linux-musl     ; LINK=dynamic ; OUT="$SCRIPT_DIR/busybox" ;;
     10) SYSTEM=m68k-mackerel-uclinux-uclibc ; LINK=bflt    ; OUT="$SCRIPT_DIR/busybox_nommu" ;;
     08) SYSTEM=m68k-mackerel-uclinux-uclibc ; LINK=bflt    ; OUT="$SCRIPT_DIR/busybox_mackerel08" ;;
-    *)  echo "Usage: $0 [board]   (board: 30, 10, or 08; default 30)"; exit 1 ;;
+    f|F)  SYSTEM=m68k-mackerel-uclinux-uclibc ; LINK=bflt    ; OUT="$SCRIPT_DIR/busybox_mackerelf" ;;
+    *)  echo "Usage: $0 [board]   (board: 30, 10, 08, or F; default 30)"; exit 1 ;;
 esac
 
 export PATH=$PATH:$HOME/x-tools/"$SYSTEM"/bin

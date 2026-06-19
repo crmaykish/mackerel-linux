@@ -11,7 +11,8 @@ case "$BOARD" in
     30) BUSYBOX="$SCRIPT_DIR/busybox"            ; STAGE="$SCRIPT_DIR/rootfs_mackerel30" ;;
     10) BUSYBOX="$SCRIPT_DIR/busybox_nommu"      ; STAGE="$SCRIPT_DIR/initramfs"         ;;
     08) BUSYBOX="$SCRIPT_DIR/busybox_mackerel08" ; STAGE="$SCRIPT_DIR/romfs_mackerel08"  ;;
-    *)  echo "Usage: $0 [board]   (board: 30, 10, or 08; default 30)"; exit 1 ;;
+    f|F)  BUSYBOX="$SCRIPT_DIR/busybox_mackerelf"  ; STAGE="$SCRIPT_DIR/initramfs"         ;;
+    *)  echo "Usage: $0 [board]   (board: 30, 10, 08, or F; default 30)"; exit 1 ;;
 esac
 
 if [ ! -f "$BUSYBOX" ]; then
@@ -372,4 +373,10 @@ assemble_rom08() {
     echo "Flash $OUT with minipro."
 }
 
-build_rootfs_"${BOARD}"
+if [ "$BOARD" = "f" ] || [ "$BOARD" = "F" ]; then
+    # Mackerel-F shares a rootfs with Mackerel-10
+    build_rootfs_10
+else
+    # Otherwise, just call the rootfs generator for the specified board
+    build_rootfs_"${BOARD}"
+fi

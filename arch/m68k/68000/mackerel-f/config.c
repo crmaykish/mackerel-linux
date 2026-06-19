@@ -6,6 +6,9 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/console.h>
+#include <linux/platform_device.h>
+#include <linux/serial_8250.h>
+#include <linux/serial_core.h>
 #include <asm/machdep.h>
 #include <asm/mackerel.h>
 #include <asm/traps.h>
@@ -56,6 +59,28 @@ static void mackerelf_reset(void)
 	local_irq_disable();
 }
 
+static struct plat_serial8250_port mackerelf_uart_port[] = {
+	{
+		.mapbase  = UART_BASE,
+		.membase  = (unsigned char __iomem *)UART_BASE,
+		.irq      = IRQ_NUM_UART,
+		.uartclk  = 64800000,
+		.regshift = 1,
+		.iotype   = UPIO_MEM,
+		.type     = PORT_16550A,
+		.flags    = UPF_BOOT_AUTOCONF | UPF_SKIP_TEST | UPF_FIXED_TYPE,
+	},
+	{ },
+};
+
+static struct platform_device mackerelf_uart_device = {
+	.name = "serial8250",
+	.id   = PLAT8250_DEV_PLATFORM,
+	.dev  = {
+		.platform_data = mackerelf_uart_port,
+	},
+};
+
 extern void mackerel_addr_err(void);
 extern void mackerel_bus_err(void);
 
@@ -72,3 +97,11 @@ void __init config_BSP(char *command, int len)
 
 	register_console(&mackerelf_console_driver);
 }
+
+static int __init mackerelf_platform_init(void)
+{
+	if (platform_device_register(&mackerelf_uart_device))
+		pr_err("Mackerel-F: could not register UART device\n");
+	return 0;
+}
+arch_initcall(mackerelf_platform_init);

@@ -61,8 +61,12 @@ case "$BOARD" in
         # Mackerel-08
         echo "Skipping rootfs for Mackerel-08 (not supported yet)"
         ;;
+    f|F)
+        # Mackerel-F
+        echo "Skipping rootfs for Mackerel-F"
+        ;;
     *)
-        echo "Error: Invalid board '$BOARD' (expected 30, 10, or 08)"
+        echo "Error: Invalid board '$BOARD' (expected 30, 10, 08, or F)"
         exit 1
         ;;
 esac

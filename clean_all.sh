@@ -8,7 +8,7 @@ echo "Artifacts"
 rm -f *.img *.bin *.gdb
 
 echo "BusyBox"
-rm -f busybox busybox_mackerel08 busybox_nommu
+rm -f busybox busybox_mackerel08 busybox_nommu busybox_mackerelf
 
 echo "Filesystems"
 sudo rm -rf rootfs_mackerel30 romfs_mackerel08 romfs_mackerel10 \

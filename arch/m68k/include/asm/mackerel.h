@@ -34,18 +34,18 @@
 #define TIMER_ENABLE_50HZ  (0x01 | (2 << 4))
 #define TIMER_ENABLE_100HZ (0x01 | (3 << 4))
 
-// 16550 Registers
-#define UART_THR (UART_BASE + 0)
-#define UART_RBR (UART_BASE + 0)
-#define UART_DLL (UART_BASE + 0)
-#define UART_IER (UART_BASE + 2)
-#define UART_DLM (UART_BASE + 2)
-#define UART_IIR (UART_BASE + 4)
-#define UART_FCR (UART_BASE + 4)
-#define UART_LCR (UART_BASE + 6)
-#define UART_LSR (UART_BASE + 10)
-#define LSR_DR   0x01
-#define LSR_THRE 0x20
+// 16550 Registers (helpers for the boot console only)
+#define MF_UART_THR (UART_BASE + 0)
+#define MF_UART_RBR (UART_BASE + 0)
+#define MF_UART_DLL (UART_BASE + 0)
+#define MF_UART_IER (UART_BASE + 2)
+#define MF_UART_DLM (UART_BASE + 2)
+#define MF_UART_IIR (UART_BASE + 4)
+#define MF_UART_FCR (UART_BASE + 4)
+#define MF_UART_LCR (UART_BASE + 6)
+#define MF_UART_LSR (UART_BASE + 10)
+#define MF_LSR_DR   0x01
+#define MF_LSR_THRE 0x20
 
 void uart16550_putc(char c);
 char uart16550_getc(void);
