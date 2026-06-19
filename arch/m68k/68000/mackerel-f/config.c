@@ -9,6 +9,10 @@
 #include <linux/platform_device.h>
 #include <linux/serial_8250.h>
 #include <linux/serial_core.h>
+#include <linux/spi/spi.h>
+#include <linux/spi/spi_oc_tiny.h>
+#include <linux/gpio/machine.h>
+#include <linux/property.h>
 #include <asm/machdep.h>
 #include <asm/mackerel.h>
 #include <asm/traps.h>
@@ -81,6 +85,69 @@ static struct platform_device mackerelf_uart_device = {
 	},
 };
 
+static struct resource mackerelf_gpio_res[] = {
+	{
+		.name  = "dat",
+		.start = GPIO_BASE,
+		.end   = GPIO_BASE,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static const struct property_entry mackerelf_gpio_props[] = {
+	PROPERTY_ENTRY_STRING("label", "mackerelf-gpio"),
+	{ }
+};
+
+static const struct platform_device_info mackerelf_gpio_info = {
+	.name       = "basic-mmio-gpio",
+	.id         = PLATFORM_DEVID_NONE,
+	.res        = mackerelf_gpio_res,
+	.num_res    = ARRAY_SIZE(mackerelf_gpio_res),
+	.properties = mackerelf_gpio_props,
+};
+
+static struct tiny_spi_platform_data mackerelf_spi_pdata = {
+	.freq      = 64800000,	// FPGA base clock - 64.8 MHz
+	.baudwidth = 8,
+};
+
+static struct resource mackerelf_spi_res[] = {
+	{
+		.start = SPI_BASE,
+		.end   = SPI_BASE + 0x1f,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device mackerelf_spi_device = {
+	.name = "spi_oc_tiny",
+	.id   = 0,	// spi0
+	.dev  = {
+		.platform_data = &mackerelf_spi_pdata,
+	},
+	.resource      = mackerelf_spi_res,
+	.num_resources = ARRAY_SIZE(mackerelf_spi_res),
+};
+
+static struct gpiod_lookup_table mackerelf_spi_cs_gpios = {
+	.dev_id = "spi0",
+	.table  = {
+		GPIO_LOOKUP_IDX("mackerelf-gpio", 6, "cs", 0, GPIO_ACTIVE_HIGH),
+		{ }
+	},
+};
+
+static struct spi_board_info mackerelf_spi_board_info[] = {
+	{
+		.modalias     = "mmc-spi-slot",
+		.max_speed_hz = 8000000,
+		.bus_num      = 0,
+		.chip_select  = 0,
+		.mode         = SPI_MODE_0,
+	},
+};
+
 extern void mackerel_addr_err(void);
 extern void mackerel_bus_err(void);
 
@@ -100,8 +167,19 @@ void __init config_BSP(char *command, int len)
 
 static int __init mackerelf_platform_init(void)
 {
+	gpiod_add_lookup_table(&mackerelf_spi_cs_gpios);
+	spi_register_board_info(mackerelf_spi_board_info,
+				ARRAY_SIZE(mackerelf_spi_board_info));
+
 	if (platform_device_register(&mackerelf_uart_device))
 		pr_err("Mackerel-F: could not register UART device\n");
+
+	if (IS_ERR(platform_device_register_full(&mackerelf_gpio_info)))
+		pr_err("Mackerel-F: could not register GPIO device\n");
+
+	if (platform_device_register(&mackerelf_spi_device))
+		pr_err("Mackerel-F: could not register SPI device\n");
+
 	return 0;
 }
 arch_initcall(mackerelf_platform_init);
