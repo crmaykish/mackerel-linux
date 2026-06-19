@@ -19,6 +19,11 @@ config MACKEREL08
 	depends on M68000
 	select LEGACY_TIMER_TICK
 
+config MACKERELF
+	bool "Mackerel-F board (fx68k soft core, NOMMU)"
+	depends on M68000
+	select LEGACY_TIMER_TICK
+
 config AMIGA
 	bool "Amiga support"
 	depends on MMU
