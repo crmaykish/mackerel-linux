@@ -19,7 +19,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [ -z "$DRIVE" ]; then
-    echo "Usage: sudo $0 <device> [board]   (board: 30|10|08, default 30)"
+    echo "Usage: sudo $0 <device> [board]   (board: 30|10|08|f, default 30)"
     exit 1
 fi
 
@@ -33,12 +33,23 @@ if [ ! -f "$SCRIPT_DIR/image.bin" ]; then
     exit 1
 fi
 
+# Mackerel-F's root is an XIP ROMfs loaded from the boot partition, so it needs
+# romf.bin alongside the kernel (build it with build_rootfs.sh f).
+if { [ "$BOARD" = "f" ] || [ "$BOARD" = "F" ]; } && [ ! -f "$SCRIPT_DIR/romf.bin" ]; then
+    echo "Error: romf.bin not found at $SCRIPT_DIR/romf.bin (run build_rootfs.sh f first)"
+    exit 1
+fi
+
 BOOT_PART="${DRIVE}1"
 ROOT_PART="${DRIVE}2"
 
 echo "Copying kernel image to $BOOT_PART..."
 mount "$BOOT_PART" "$MOUNT_POINT"
 cp "$SCRIPT_DIR/image.bin" "$MOUNT_POINT/IMAGE.BIN"
+if [ "$BOARD" = "f" ] || [ "$BOARD" = "F" ]; then
+    echo "Copying ROMfs root to $BOOT_PART..."
+    cp "$SCRIPT_DIR/romf.bin" "$MOUNT_POINT/ROMFS.BIN"
+fi
 sync
 umount "$MOUNT_POINT"
 
@@ -62,8 +73,7 @@ case "$BOARD" in
         echo "Skipping rootfs for Mackerel-08 (not supported yet)"
         ;;
     f|F)
-        # Mackerel-F
-        echo "Skipping rootfs for Mackerel-F"
+        echo "Mackerel-F root is the XIP ROMfs on $BOOT_PART (romf.bin); $ROOT_PART unused."
         ;;
     *)
         echo "Error: Invalid board '$BOARD' (expected 30, 10, 08, or F)"

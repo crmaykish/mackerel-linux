@@ -48,9 +48,7 @@ make ARCH=m68k distclean
 echo "Defconfig ($DEFCONFIG)..."
 make ARCH=m68k "$DEFCONFIG"
 
-# Mackerel-10 and Mackerel-F embed an initramfs, so it must exist before building
-if { [ "$BOARD" = "10" ] || [ "$BOARD" = "f" ] || [ "$BOARD" = "F" ]; } && \
-   [ ! -f "$SCRIPT_DIR/initramfs.list" ]; then
+if [ "$BOARD" = "10" ] && [ ! -f "$SCRIPT_DIR/initramfs.list" ]; then
     echo "Error: initramfs.list not found (run build_rootfs.sh $BOARD first)"
     exit 1
 fi

@@ -11,7 +11,7 @@ case "$BOARD" in
     30) BUSYBOX="$SCRIPT_DIR/busybox"            ; STAGE="$SCRIPT_DIR/rootfs_mackerel30" ;;
     10) BUSYBOX="$SCRIPT_DIR/busybox_nommu"      ; STAGE="$SCRIPT_DIR/initramfs"         ;;
     08) BUSYBOX="$SCRIPT_DIR/busybox_mackerel08" ; STAGE="$SCRIPT_DIR/romfs_mackerel08"  ;;
-    f|F)  BUSYBOX="$SCRIPT_DIR/busybox_mackerelf"  ; STAGE="$SCRIPT_DIR/initramfs"         ;;
+    f|F)  BUSYBOX="$SCRIPT_DIR/busybox_mackerelf"  ; STAGE="$SCRIPT_DIR/romfs_mackerelf"   ;;
     *)  echo "Usage: $0 [board]   (board: 30, 10, 08, or F; default 30)"; exit 1 ;;
 esac
 
@@ -373,9 +373,86 @@ assemble_rom08() {
     echo "Flash $OUT with minipro."
 }
 
+# romf.bin, loaded to SDRAM by the bootloader
+build_rootfs_f() {
+    local OUT="$SCRIPT_DIR/romf.bin"
+
+    echo "Staging Mackerel-F ROMfs tree at $STAGE..."
+    rm -rf "$STAGE"
+    mkdir -p "$STAGE"/{bin,sbin,etc,proc,sys,dev,tmp,mnt,root}
+
+    cp "$BUSYBOX" "$STAGE/bin/busybox"; chmod 755 "$STAGE/bin/busybox"
+
+    for cmd in \
+        sh ash hush echo cat ls mkdir rm rmdir cp mv ln touch pwd \
+        sleep ps kill killall mount umount \
+        hostname uname env dmesg clear reset true false test \
+        grep sed cut tr wc head tail sort uniq find xargs \
+        expr printf date free df stat readlink basename dirname dd \
+        hexdump od strings vi \
+        ifconfig ping route ip nslookup udhcpc nc wget; do
+        ln -sf busybox "$STAGE/bin/$cmd"
+    done
+
+    ln -sf /bin/busybox "$STAGE/init"
+    ln -sf /bin/busybox "$STAGE/sbin/init"
+
+    # /dev is auto-populated by CONFIG_DEVTMPFS_MOUNT; /proc /sys /tmp via inittab.
+    cat > "$STAGE/etc/inittab" <<'EOF'
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mount -t tmpfs tmpfs /tmp
+::sysinit:/bin/hostname mackerel-f
+::sysinit:/etc/init.d/sdcard
+::sysinit:/bin/echo Mackerel-F uClinux - init OK
+::respawn:-/bin/sh
+::ctrlaltdel:/bin/reboot
+EOF
+
+    # The microSD's first mmc_spi probe times out right after the bootloader's
+    # heavy reads (card hasn't settled), and so does an immediate rebind. Retry
+    # the rebind in the background until mmcblk0 appears, so boot isn't blocked
+    # and the card comes up on its own once it settles (~tens of seconds).
+    mkdir -p "$STAGE/etc/init.d"
+    cat > "$STAGE/etc/init.d/sdcard" <<'EOF'
+#!/bin/sh
+(
+    i=0
+    while [ ! -e /dev/mmcblk0 ] && [ "$i" -lt 15 ]; do
+        echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/unbind 2>/dev/null
+        echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/bind 2>/dev/null
+        [ -e /dev/mmcblk0 ] && break
+        sleep 2
+        i=$((i + 1))
+    done
+) &
+EOF
+    chmod 755 "$STAGE/etc/init.d/sdcard"
+
+    echo "root::0:0:root:/root:/bin/sh" > "$STAGE/etc/passwd"
+
+    cat > "$STAGE/etc/profile" <<'EOF'
+export HOME=/root
+export PATH=/bin:/sbin
+export PS1='\u@mackerel-f:\w\$ '
+cd "$HOME"
+EOF
+
+    echo "Building ROMfs image -> $OUT ..."
+    genromfs -d "$STAGE" -f "$OUT" -V 'mackerelf'
+
+    local sz
+    sz=$(stat -c%s "$OUT")
+    echo "[+] $OUT  ($sz bytes)"
+    if [ "$sz" -gt $((0xc0000)) ]; then
+        echo "WARNING: romf.bin ($sz) exceeds the 768 KB (0xC0000) region at 0x700000!"
+        echo "         Trim busybox applets or the region overlaps the bootloader RAM."
+    fi
+    echo "Copy $OUT to the SD card's FAT16 partition as romf.bin."
+}
+
 if [ "$BOARD" = "f" ] || [ "$BOARD" = "F" ]; then
-    # Mackerel-F shares a rootfs with Mackerel-10
-    build_rootfs_10
+    build_rootfs_f
 else
     # Otherwise, just call the rootfs generator for the specified board
     build_rootfs_"${BOARD}"
