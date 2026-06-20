@@ -13,6 +13,7 @@
 #include <linux/spi/spi_oc_tiny.h>
 #include <linux/gpio/machine.h>
 #include <linux/property.h>
+#include <linux/platform_data/wiznet.h>
 #include <asm/machdep.h>
 #include <asm/mackerel.h>
 #include <asm/traps.h>
@@ -138,6 +139,38 @@ static struct gpiod_lookup_table mackerelf_spi_cs_gpios = {
 	},
 };
 
+// 2nd tiny_spi controller (slot 4) for the W5500 NIC
+static struct resource mackerelf_spi2_res[] = {
+	{
+		.start = SPI2_BASE,
+		.end   = SPI2_BASE + 0x1f,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device mackerelf_spi2_device = {
+	.name = "spi_oc_tiny",
+	.id   = 1,	// spi1
+	.dev  = {
+		.platform_data = &mackerelf_spi_pdata,
+	},
+	.resource      = mackerelf_spi2_res,
+	.num_resources = ARRAY_SIZE(mackerelf_spi2_res),
+};
+
+static struct gpiod_lookup_table mackerelf_spi2_cs_gpios = {
+	.dev_id = "spi1",
+	.table  = {
+		GPIO_LOOKUP_IDX("mackerelf-gpio", 7, "cs", 0, GPIO_ACTIVE_HIGH),
+		{ }
+	},
+};
+
+static struct wiznet_platform_data mackerelf_w5500_pdata = {
+	.link_gpio = -1,
+	.mac_addr  = { 0x02, 0x4d, 0x4b, 0x52, 0x46, 0x01 },
+};
+
 static struct spi_board_info mackerelf_spi_board_info[] = {
 	{
 		.modalias     = "mmc-spi-slot",
@@ -145,6 +178,15 @@ static struct spi_board_info mackerelf_spi_board_info[] = {
 		.bus_num      = 0,
 		.chip_select  = 0,
 		.mode         = SPI_MODE_0,
+	},
+	{
+		.modalias       = "w5500",
+		.max_speed_hz   = 4000000,
+		.bus_num        = 1,
+		.chip_select    = 0,
+		.mode           = SPI_MODE_0,
+		.irq            = IRQ_NUM_NIC,	// W5500 INT, autovector level 4
+		.platform_data  = &mackerelf_w5500_pdata,
 	},
 };
 
@@ -168,6 +210,7 @@ void __init config_BSP(char *command, int len)
 static int __init mackerelf_platform_init(void)
 {
 	gpiod_add_lookup_table(&mackerelf_spi_cs_gpios);
+	gpiod_add_lookup_table(&mackerelf_spi2_cs_gpios);
 	spi_register_board_info(mackerelf_spi_board_info,
 				ARRAY_SIZE(mackerelf_spi_board_info));
 
@@ -179,6 +222,9 @@ static int __init mackerelf_platform_init(void)
 
 	if (platform_device_register(&mackerelf_spi_device))
 		pr_err("Mackerel-F: could not register SPI device\n");
+
+	if (platform_device_register(&mackerelf_spi2_device))
+		pr_err("Mackerel-F: could not register SPI2 device\n");
 
 	return 0;
 }

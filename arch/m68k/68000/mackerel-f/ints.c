@@ -32,8 +32,9 @@ void process_int(int vec, struct pt_regs *fp)
 	do_IRQ(irq_num, fp);
 }
 
-static void intc_irq_unmask(struct irq_data *d) {}
-static void intc_irq_mask(struct irq_data *d) {}
+// Per-level enable bits in the SoC interrupt controller
+static void intc_irq_unmask(struct irq_data *d) { MEM(INTC_BASE) |= (1 << d->irq); }
+static void intc_irq_mask(struct irq_data *d) { MEM(INTC_BASE) &= ~(1 << d->irq); }
 
 static struct irq_chip intc_irq_chip = {
 	.name       = "MACKEREL-INTC",

@@ -23,6 +23,9 @@
 #define UART_BASE  0xFFF900
 #define TIMER_BASE 0xFFFA00
 #define SPI_BASE   0xFFFB00
+#define SPI2_BASE  0xFFFC00
+#define INTC_BASE  0xFFFD00	// per-level IRQ enable/mask register
+#define IRQ_NUM_NIC   4
 #define IRQ_NUM_UART  5
 #define IRQ_NUM_TIMER 6
 
