@@ -69,7 +69,7 @@ static struct plat_serial8250_port mackerelf_uart_port[] = {
 		.mapbase  = UART_BASE,
 		.membase  = (unsigned char __iomem *)UART_BASE,
 		.irq      = IRQ_NUM_UART,
-		.uartclk  = 64800000,
+		.uartclk  = 75600000,
 		.regshift = 1,
 		.iotype   = UPIO_MEM,
 		.type     = PORT_16550A,
@@ -109,7 +109,7 @@ static const struct platform_device_info mackerelf_gpio_info = {
 };
 
 static struct tiny_spi_platform_data mackerelf_spi_pdata = {
-	.freq      = 64800000,	// FPGA base clock - 64.8 MHz
+	.freq      = 75600000,	// FPGA base clock - 75.6 MHz
 	.baudwidth = 8,
 };
 
