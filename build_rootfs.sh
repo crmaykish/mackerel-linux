@@ -384,13 +384,11 @@ build_rootfs_f() {
     cp "$BUSYBOX" "$STAGE/bin/busybox"; chmod 755 "$STAGE/bin/busybox"
 
     for cmd in \
-        sh ash hush echo cat ls mkdir rm rmdir cp mv ln touch pwd \
-        sleep ps kill killall mount umount \
-        hostname uname env dmesg clear reset true false test \
-        grep sed cut tr wc head tail sort uniq find xargs \
-        expr printf date free df stat readlink basename dirname dd \
-        hexdump od strings vi \
-        ifconfig ping route ip nslookup udhcpc nc wget; do
+        sh hush echo cat ls mkdir rm rmdir cp mv ln touch pwd sync \
+        chmod chown mknod dd mount umount \
+        ps kill sleep dmesg uname hostname free df true false test grep sed \
+        reboot halt poweroff \
+        ifconfig ping route udhcpc wget; do
         ln -sf busybox "$STAGE/bin/$cmd"
     done
 
@@ -404,30 +402,69 @@ build_rootfs_f() {
 ::sysinit:/bin/mount -t tmpfs tmpfs /tmp
 ::sysinit:/bin/hostname mackerel-f
 ::sysinit:/etc/init.d/sdcard
+::sysinit:/etc/init.d/network
 ::sysinit:/bin/echo Mackerel-F uClinux - init OK
 ::respawn:-/bin/sh
 ::ctrlaltdel:/bin/reboot
 EOF
 
     # The microSD's first mmc_spi probe times out right after the bootloader's
-    # heavy reads (card hasn't settled), and so does an immediate rebind. Retry
-    # the rebind in the background until mmcblk0 appears, so boot isn't blocked
-    # and the card comes up on its own once it settles (~tens of seconds).
+    # The SD card does not realiably probe the first time. This is a hack to keep
+    # retrying in the background until it works...
     mkdir -p "$STAGE/etc/init.d"
     cat > "$STAGE/etc/init.d/sdcard" <<'EOF'
 #!/bin/sh
 (
+    sleep 10
     i=0
-    while [ ! -e /dev/mmcblk0 ] && [ "$i" -lt 15 ]; do
+    while [ ! -e /dev/mmcblk0 ] && [ "$i" -lt 8 ]; do
         echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/unbind 2>/dev/null
         echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/bind 2>/dev/null
         [ -e /dev/mmcblk0 ] && break
-        sleep 2
+        sleep 5
         i=$((i + 1))
     done
 ) &
 EOF
     chmod 755 "$STAGE/etc/init.d/sdcard"
+
+    # DHCP setup on boot
+    mkdir -p "$STAGE/usr/share/udhcpc"
+    cat > "$STAGE/usr/share/udhcpc/default.script" <<'EOF'
+#!/bin/sh
+[ -z "$interface" ] && exit 1
+case "$1" in
+    deconfig)
+        ifconfig "$interface" 0.0.0.0
+        ;;
+    bound|renew)
+        ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
+        if [ -n "$router" ]; then
+            route del default 2>/dev/null
+            route add default gw "${router%% *}"
+        fi
+        : > /etc/resolv.conf
+        for d in $dns; do echo "nameserver $d" >> /etc/resolv.conf; done
+        ;;
+esac
+EOF
+    chmod 755 "$STAGE/usr/share/udhcpc/default.script"
+    ln -sf /tmp/resolv.conf "$STAGE/etc/resolv.conf"
+
+    cat > "$STAGE/etc/init.d/network" <<'EOF'
+#!/bin/sh
+ifconfig lo 127.0.0.1 up
+(
+    ifconfig eth0 0.0.0.0 up
+    i=0
+    while [ "$(cat /sys/class/net/eth0/carrier 2>/dev/null)" != "1" ] && [ "$i" -lt 20 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    udhcpc -i eth0 -q -t 15 -T 3 -p /tmp/udhcpc.eth0.pid >/dev/null 2>&1
+) &
+EOF
+    chmod 755 "$STAGE/etc/init.d/network"
 
     echo "root::0:0:root:/root:/bin/sh" > "$STAGE/etc/passwd"
 
