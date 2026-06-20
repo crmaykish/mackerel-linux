@@ -8,8 +8,8 @@
 #include <linux/mtd/map.h>
 #include <linux/mtd/mtd.h>
 
-#define MACKF_ROMFS_PHYS 0x700000
-#define MACKF_ROMFS_SIZE 0xc0000 // 768 KB (0x700000..0x7BFFFF)
+#define MACKF_ROMFS_PHYS 0x7A0000
+#define MACKF_ROMFS_SIZE 0x60000 // 384 KB (0x7A0000..0x7FFFFF)
 
 static struct map_info mackf_map = {
 	.name = "mackerel-romfs",
