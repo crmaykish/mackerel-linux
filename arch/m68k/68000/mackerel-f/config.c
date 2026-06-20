@@ -40,7 +40,7 @@ static void mackerelf_sched_init(void)
 	}
 
 	// Start the timer
-	MEM(TIMER_CTRL) = TIMER_ENABLE_100HZ;
+	MEM(TIMER_CTRL) = TIMER_ENABLE_25HZ;
 }
 
 static void mackerelf_console_write(struct console *co, const char *str,
