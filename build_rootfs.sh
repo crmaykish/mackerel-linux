@@ -411,23 +411,32 @@ build_rootfs_f() {
 ::ctrlaltdel:/bin/reboot
 EOF
 
-    # The microSD's first mmc_spi probe times out right after the bootloader's
-    # The SD card does not realiably probe the first time. This is a hack to keep
-    # retrying in the background until it works...
+    # Block boot here until the microSD is up, then mount its Linux partition
+    # (mmcblk0p2, i.e. "sda2") as /root so the shell always launches with a
+    # persistent, writable home in place.
     mkdir -p "$STAGE/etc/init.d"
     cat > "$STAGE/etc/init.d/sdcard" <<'EOF'
 #!/bin/sh
-(
-    sleep 10
-    i=0
-    while [ ! -e /dev/mmcblk0 ] && [ "$i" -lt 8 ]; do
-        echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/unbind 2>/dev/null
-        echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/bind 2>/dev/null
-        [ -e /dev/mmcblk0 ] && break
-        sleep 5
-        i=$((i + 1))
-    done
-) &
+echo "Waiting for SD card..."
+sleep 10
+i=0
+while [ ! -e /dev/mmcblk0 ]; do
+    echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/unbind 2>/dev/null
+    echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/bind 2>/dev/null
+    sleep 5
+    i=$((i + 1))
+    if [ "$i" -ge 24 ]; then
+        echo "SD card did not appear after ~$((10 + i * 5))s; /root NOT mounted"
+        exit 0
+    fi
+done
+# the block device is up; give the partition scan a moment to create p2
+[ -e /dev/mmcblk0p2 ] || sleep 2
+if mount /dev/mmcblk0p2 /root; then
+    echo "Mounted /dev/mmcblk0p2 on /root"
+else
+    echo "SD up but mounting /dev/mmcblk0p2 on /root FAILED"
+fi
 EOF
     chmod 755 "$STAGE/etc/init.d/sdcard"
 
