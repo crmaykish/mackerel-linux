@@ -385,10 +385,10 @@ build_rootfs_f() {
 
     for cmd in \
         sh hush echo cat ls mkdir rm rmdir cp mv ln touch pwd sync \
-        chmod chown mknod dd mount umount \
-        ps kill sleep dmesg uname hostname free df true false test grep sed \
+        chmod chown mknod dd mount umount clear \
+        ps kill sleep dmesg uname hostname uptime free df true false test grep sed \
         reboot halt poweroff \
-        ifconfig ping route udhcpc wget; do
+        ifconfig ping route udhcpc wget telnetd; do
         ln -sf busybox "$STAGE/bin/$cmd"
     done
 
@@ -400,10 +400,13 @@ build_rootfs_f() {
 ::sysinit:/bin/mount -t proc proc /proc
 ::sysinit:/bin/mount -t sysfs sysfs /sys
 ::sysinit:/bin/mount -t tmpfs tmpfs /tmp
+::sysinit:/bin/mkdir -p /dev/pts
+::sysinit:/bin/mount -t devpts devpts /dev/pts
 ::sysinit:/bin/hostname mackerel-f
 ::sysinit:/etc/init.d/sdcard
 ::sysinit:/etc/init.d/network
 ::sysinit:/bin/echo Mackerel-F uClinux - init OK
+::respawn:/bin/telnetd -F -l /bin/sh
 ::respawn:-/bin/sh
 ::ctrlaltdel:/bin/reboot
 EOF
@@ -455,6 +458,8 @@ EOF
 #!/bin/sh
 ifconfig lo 127.0.0.1 up
 (
+    # Fixed MAC (matches the bootloader's W5500 MAC)
+    ifconfig eth0 hw ether 02:4D:4B:52:46:01
     ifconfig eth0 0.0.0.0 up
     i=0
     while [ "$(cat /sys/class/net/eth0/carrier 2>/dev/null)" != "1" ] && [ "$i" -lt 20 ]; do
