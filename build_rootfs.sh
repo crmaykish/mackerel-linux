@@ -388,7 +388,7 @@ build_rootfs_f() {
         chmod chown mknod dd mount umount clear \
         ps kill sleep dmesg uname hostname uptime free df true false test grep sed \
         reboot halt poweroff \
-        ifconfig ping route udhcpc wget telnetd; do
+        ifconfig ping route udhcpc wget telnetd httpd; do
         ln -sf busybox "$STAGE/bin/$cmd"
     done
 
@@ -405,6 +405,7 @@ build_rootfs_f() {
 ::sysinit:/bin/hostname mackerel-f
 ::sysinit:/etc/init.d/sdcard
 ::sysinit:/etc/init.d/network
+::sysinit:/bin/httpd -h /www -p 80
 ::sysinit:/bin/echo Mackerel-F uClinux - init OK
 ::respawn:/bin/telnetd -F -l /bin/sh
 ::respawn:-/bin/sh
@@ -489,15 +490,79 @@ export PS1='\u@mackerel-f:\w\$ '
 cd "$HOME"
 EOF
 
+    mkdir -p "$STAGE/www/cgi-bin"
+
+    cat > "$STAGE/www/cgi-bin/index.cgi" <<'CGIEOF'
+#!/bin/sh
+# Mackerel-F status page.
+
+COUNTER=/tmp/visitors
+for d in /root /tmp; do
+    if touch "$d/.wtest" 2>/dev/null; then
+        rm -f "$d/.wtest"
+        COUNTER="$d/visitors"
+        break
+    fi
+done
+
+count=$(cat "$COUNTER" 2>/dev/null)
+[ -z "$count" ] && count=0
+count=$((count + 1))
+echo "$count" > "$COUNTER"
+
+read up idle < /proc/uptime
+up=${up%.*}
+days=$((up / 86400))
+hrs=$(((up % 86400) / 3600))
+mins=$(((up % 3600) / 60))
+secs=$((up % 60))
+
+memtotal=$(sed -n 's/^MemTotal: *\([0-9]*\).*/\1/p' /proc/meminfo)
+memfree=$(sed -n 's/^MemFree: *\([0-9]*\).*/\1/p' /proc/meminfo)
+kver=$(uname -srm)
+host=$(hostname)
+
+echo "Content-type: text/html"
+echo ""
+cat <<HTML
+<!DOCTYPE html>
+<html><head><title>$host</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:monospace;background:#101418;color:#cfe;margin:0;padding:2em}
+h1{color:#5cf;margin:0}
+table{border-collapse:collapse;margin-top:1em}
+td{padding:.3em 1em;border-bottom:1px solid #233}
+.n{color:#fc6;text-align:right}
+.c{font-size:2.5em;color:#6f9;margin:.2em 0}
+small{color:#789}
+</style></head>
+<body>
+<h1>$host</h1>
+<small>Motorola 68000 (fx68k) &middot; uClinux &middot; busybox httpd</small>
+<table>
+<tr><td>Kernel</td><td class="n">$kver</td></tr>
+<tr><td>Uptime</td><td class="n">${days}d ${hrs}h ${mins}m ${secs}s</td></tr>
+<tr><td>RAM total</td><td class="n">$memtotal kB</td></tr>
+<tr><td>RAM free</td><td class="n">$memfree kB</td></tr>
+</table>
+<p>You are visitor number</p>
+<p class="c">$count</p>
+</body></html>
+HTML
+CGIEOF
+    chmod 755 "$STAGE/www/cgi-bin/index.cgi"
+    # ---------------------------------------------------------------------
+
     echo "Building ROMfs image -> $OUT ..."
     genromfs -d "$STAGE" -f "$OUT" -V 'mackerelf'
 
     local sz
     sz=$(stat -c%s "$OUT")
     echo "[+] $OUT  ($sz bytes)"
-    if [ "$sz" -gt $((0xc0000)) ]; then
-        echo "WARNING: romf.bin ($sz) exceeds the 768 KB (0xC0000) region at 0x700000!"
-        echo "         Trim busybox applets or the region overlaps the bootloader RAM."
+    if [ "$sz" -gt $((0x60000)) ]; then
+        echo "WARNING: romf.bin ($sz) exceeds the 384 KB (0x60000) XIP region at 0x7A0000!"
+        echo "         Trim busybox applets or it will overrun the top of SDRAM."
     fi
     echo "Copy $OUT to the SD card's FAT16 partition as romf.bin."
 }
