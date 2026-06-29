@@ -12,7 +12,6 @@
 #define MACKEREL_BOARD_NAME "Mackerel-10"
 #define IRQ_NUM_IDE   3
 #define IRQ_NUM_DUART 5
-#define IRQ_NUM_TIMER 6
 #define DUART1_BASE 0xFF8000
 #define IDE_BASE     0xFFC000	// command block (CS0)
 #define IDE_CTL_BASE 0xFF400C	// control block (CS1): alt status / device control
@@ -97,13 +96,14 @@ char uart16550_getc(void);
 #define DUART_INTR_COUNTER 0b00001000
 #define DUART_INTR_RXRDY 0b00100000
 
-// Mackerel-08 serial interrupts and timer interrupts both come from the same DUART pin
-// so we need to preserve IMR and ACR register bits during the timer tick
-#ifdef CONFIG_MACKEREL08
+// On Mackerel-08 and Mackerel-10 the serial and timer interrupts both come from the
+// same DUART pin, so the serial driver must preserve the IMR counter-enable and the
+// ACR timer-mode bits across its own register writes.
+#if defined(CONFIG_MACKEREL08) || defined(CONFIG_MACKEREL10)
 #define DUART_IMR_RESERVED DUART_INTR_COUNTER
 #define DUART_ACR_RESERVED 0x70
 
-// The other Mackere boards have separate timer and serial interrupt lines, so not important
+// Mackerel-F and Mackerel-30 has separate timer and serial interrupt lines, so nothing to preserve.
 #else
 #define DUART_IMR_RESERVED 0
 #define DUART_ACR_RESERVED 0

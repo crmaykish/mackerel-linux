@@ -16,16 +16,9 @@
 
 extern void legacy_timer_tick(unsigned long ticks);
 
-#ifdef CONFIG_MACKEREL08
-// Mackerel-08 has no timer chip; the XR68C681 counter/timer is the system tick.
-// It shares the DUART IRQ with the serial port, so the handler is shared and
-// ticks only when the counter-ready bit is set.
 #define DUART_XTAL_HZ	3686400UL
 #define TIMER_CLK_HZ	(DUART_XTAL_HZ / 16)	/* ACR[6:4]=111: X1/CLK / 16 */
 
-// Mackerel-08 DUART interrupts fire once per cycle, so the preset is for half the desired tick rate
-// Timer is configured for 50 Hz
-// Note: the poor 68008 cannot keep up with higher interrupt rates
 #define TIMER_PRESET	(TIMER_CLK_HZ / (2 * HZ))
 
 static int mackerel_timer_id;
@@ -57,25 +50,9 @@ static void mackerel_sched_init(void)
 	ret = request_irq(IRQ_NUM_DUART, mackerel_timer_isr, IRQF_SHARED,
 			  "mackerel-timer", &mackerel_timer_id);
 	if (ret) {
-		pr_err("Mackerel-08: cannot get timer IRQ: %d\n", ret);
+		pr_err(MACKEREL_BOARD_NAME ": cannot get timer IRQ: %d\n", ret);
 	}
 }
-#else // Mackerel-10
-static irqreturn_t hw_tick(int irq, void *dummy)
-{
-	legacy_timer_tick(1);
-	return IRQ_HANDLED;
-}
-
-static void mackerel_sched_init(void)
-{
-	int ret;
-
-	ret = request_irq(IRQ_NUM_TIMER, hw_tick, IRQF_TIMER, "timer", NULL);
-	if (ret)
-		pr_err("Mackerel-10: cannot get timer IRQ: %d\n", ret);
-}
-#endif
 
 static void mackerel_console_write(struct console *co, const char *str,
 				   unsigned int count)
