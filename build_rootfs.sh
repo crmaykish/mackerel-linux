@@ -1,95 +1,56 @@
 #!/usr/bin/env bash
 # Build the root filesystem for a Mackerel board.
-# bash build_rootfs.sh [board]       board: 30 (default), 10, or 08
-# Note: depends on build_busybox.sh having been run for the same board
+# bash build_rootfs.sh [board]      board: 30 (default), 10, 08, or f
+# Depends on build_busybox.sh having been run for the same board
 set -e
 
 BOARD="${1:-30}"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 case "$BOARD" in
-    30) BUSYBOX="$SCRIPT_DIR/busybox"            ; STAGE="$SCRIPT_DIR/rootfs_mackerel30" ;;
-    10) BUSYBOX="$SCRIPT_DIR/busybox_nommu"      ; STAGE="$SCRIPT_DIR/initramfs"         ;;
-    08) BUSYBOX="$SCRIPT_DIR/busybox_mackerel08" ; STAGE="$SCRIPT_DIR/romfs_mackerel08"  ;;
-    f|F)  BUSYBOX="$SCRIPT_DIR/busybox_mackerelf"  ; STAGE="$SCRIPT_DIR/romfs_mackerelf"   ;;
-    *)  echo "Usage: $0 [board]   (board: 30, 10, 08, or F; default 30)"; exit 1 ;;
+    30)  BB=busybox            ; STAGE=rootfs_mackerel30 ; FORMAT=dir       ;;
+    10)  BB=busybox_nommu      ; STAGE=romfs_mackerel10  ; FORMAT=romfs     ;;
+    08)  BB=busybox_mackerel08 ; STAGE=romfs_mackerel08  ; FORMAT=romfs-rom ;;
+    f|F) BB=busybox_mackerelf  ; STAGE=romfs_mackerelf   ; FORMAT=romfs     ; BOARD=f ;;
+    *)   echo "Usage: $0 [board]   (board: 30, 10, 08, or f; default 30)"; exit 1 ;;
 esac
+BUSYBOX="$SCRIPT_DIR/$BB"; STAGE="$SCRIPT_DIR/$STAGE"; LINKS="$BUSYBOX.links"
 
-if [ ! -f "$BUSYBOX" ]; then
-    echo "ERROR: $BUSYBOX not found. Run: bash build_busybox.sh $BOARD"
-    exit 1
-fi
+[ -f "$BUSYBOX" ] || { echo "ERROR: $BUSYBOX not found. Run: bash build_busybox.sh $BOARD"; exit 1; }
+[ -f "$LINKS" ]   || { echo "ERROR: $LINKS not found. Run: bash build_busybox.sh $BOARD"; exit 1; }
 
-# Mackerel-30
-build_rootfs_30() {
-    echo "Building Mackerel-30 root filesystem tree at $STAGE..."
+stage_busybox() {
+    echo "Staging $STAGE (busybox + applet symlinks from $(basename "$LINKS"))..."
     rm -rf "$STAGE"
-    mkdir -p "$STAGE"/{bin,sbin,etc,proc,sys,dev,tmp,mnt,boot,root,lib,usr/bin,usr/sbin,usr/lib,usr/share/udhcpc,var/log,var/run,etc/init.d}
-    chmod 1777 "$STAGE/tmp"
-    chmod 700  "$STAGE/root"
+    mkdir -p "$STAGE/bin"
+    cp "$BUSYBOX" "$STAGE/bin/busybox"; chmod 755 "$STAGE/bin/busybox"
+    while read -r p; do
+        case "$p" in ""|/bin/busybox) continue ;; esac
+        mkdir -p "$STAGE${p%/*}"
+        ln -sf /bin/busybox "$STAGE$p"
+    done < "$LINKS"
+    mkdir -p "$STAGE/sbin"; ln -sf /bin/busybox "$STAGE/sbin/init"
+    [ "$FORMAT" = dir ] || ln -sf /bin/busybox "$STAGE/init"
+}
 
-    echo "Installing BusyBox..."
-    cp "$BUSYBOX" "$STAGE/bin/busybox"
-    chmod 755 "$STAGE/bin/busybox"
-
-    echo "Creating BusyBox symlinks..."
-    for cmd in \
-        sh ash bash init \
-        arp arping awk \
-        basename cat chmod chown chgrp clear cp cut \
-        date dd df diff dirname dmesg du \
-        echo env expr false find free \
-        grep gunzip gzip \
-        head hexdump hostname \
-        id ifconfig insmod ip \
-        kill killall ln ls lsmod \
-        md5sum mkdir mkfifo mknod more mount mv \
-        nc nslookup \
-        od \
-        ping printf ps pwd \
-        readlink realpath rm rmdir rmmod route \
-        sed sha1sum sleep sort stat strings stty \
-        tail tar tee time touch traceroute traceroute6 tr true \
-        rdate syslogd klogd \
-        udhcpc uname uniq umount \
-        vi \
-        wc wget which whoami \
-        xargs yes \
-        reset sysctl \
-        ; do
-        ln -sf busybox "$STAGE/bin/$cmd"
-    done
-
-    # init lives in /sbin
-    ln -sf ../bin/busybox "$STAGE/sbin/init"
-    ln -sf ../bin/busybox "$STAGE/usr/sbin/udhcpc"
+# Mackerel-30: ext4 disk root (musl, dynamic libs)
+config_30() {
+    mkdir -p "$STAGE"/{etc,proc,sys,dev,tmp,mnt,boot,root,lib,usr/bin,usr/lib,usr/share/udhcpc,var/log,var/run,etc/init.d}
+    chmod 1777 "$STAGE/tmp"; chmod 700 "$STAGE/root"
 
     echo "Installing shared libraries..."
-    SYSROOT="$HOME/x-tools/m68k-mackerel-linux-musl/m68k-mackerel-linux-musl/sysroot"
-    STRIP="$HOME/x-tools/m68k-mackerel-linux-musl/bin/m68k-mackerel-linux-musl-strip"
-
-    if [ ! -d "$SYSROOT" ]; then
-        echo "Error: sysroot not found at $SYSROOT"
-        exit 1
-    fi
-
-    # musl libc — also serves as the dynamic linker
+    local SYSROOT="$HOME/x-tools/m68k-mackerel-linux-musl/m68k-mackerel-linux-musl/sysroot"
+    local STRIP="$HOME/x-tools/m68k-mackerel-linux-musl/bin/m68k-mackerel-linux-musl-strip"
+    [ -d "$SYSROOT" ] || { echo "Error: sysroot not found at $SYSROOT"; exit 1; }
     install -m755 "$SYSROOT/usr/lib/libc.so"        "$STAGE/usr/lib/libc.so"
     ln -sf ../usr/lib/libc.so "$STAGE/lib/ld-musl-m68k.so.1"
-
-    # GCC runtime
     install -m755 "$SYSROOT/lib/libgcc_s.so.2"      "$STAGE/lib/libgcc_s.so.2"
     ln -sf libgcc_s.so.2      "$STAGE/lib/libgcc_s.so"
-
-    # Atomic operations
     install -m755 "$SYSROOT/lib/libatomic.so.1.2.0" "$STAGE/lib/libatomic.so.1.2.0"
     ln -sf libatomic.so.1.2.0 "$STAGE/lib/libatomic.so.1"
     ln -sf libatomic.so.1.2.0 "$STAGE/lib/libatomic.so"
-
-    # Strip debug info from copied libraries
     "$STRIP" "$STAGE/usr/lib/libc.so" "$STAGE/lib/libgcc_s.so.2" "$STAGE/lib/libatomic.so.1.2.0"
 
-    echo "Writing /usr/share/udhcpc/default.script..."
     cat > "$STAGE/usr/share/udhcpc/default.script" <<'EOF'
 #!/bin/sh
 [ -z "$interface" ] && exit 1
@@ -114,7 +75,6 @@ esac
 EOF
     chmod 755 "$STAGE/usr/share/udhcpc/default.script"
 
-    echo "Writing /etc/init.d/network..."
     cat > "$STAGE/etc/init.d/network" <<'EOF'
 #!/bin/sh
 LOG=/var/log/network.log
@@ -131,21 +91,17 @@ rdate -s time.nist.gov && echo "network: time synced" || echo "network: time syn
 EOF
     chmod 755 "$STAGE/etc/init.d/network"
 
-    echo "Installing debug tools..."
-    if [ ! -f "$SCRIPT_DIR/debug/fpu_test" ]; then
-        echo "Warning: debug/fpu_test not found — skipping (run make in debug/)"
+    if [ -f "$SCRIPT_DIR/debug/fpu_test" ]; then
+        cp "$SCRIPT_DIR/debug/fpu_test" "$STAGE/usr/bin/fpu_test"; chmod 755 "$STAGE/usr/bin/fpu_test"
     else
-        cp "$SCRIPT_DIR/debug/fpu_test" "$STAGE/usr/bin/fpu_test"
-        chmod 755 "$STAGE/usr/bin/fpu_test"
+        echo "Warning: debug/fpu_test not found — skipping (run make in debug/)"
     fi
 
-    echo "Writing /etc/sysctl.conf..."
     cat > "$STAGE/etc/sysctl.conf" <<'EOF'
 net.ipv4.ping_group_range = 0 2147483647
 kernel.printk = 3 4 1 3
 EOF
 
-    echo "Writing /etc/inittab..."
     cat > "$STAGE/etc/inittab" <<'EOF'
 ::sysinit:/bin/mount -t proc proc /proc
 ::sysinit:/bin/mount -t sysfs sysfs /sys
@@ -166,7 +122,6 @@ exec /bin/sh
 EOF
     chmod 755 "$STAGE/etc/login"
 
-    echo "Writing /etc/fstab..."
     cat > "$STAGE/etc/fstab" <<'EOF'
 /dev/sda1   /boot   msdos   ro,noatime          0 0
 /dev/sda2   /       ext4    defaults,noatime    0 1
@@ -176,69 +131,38 @@ devtmpfs    /dev    devtmpfs defaults           0 0
 tmpfs       /tmp    tmpfs   defaults            0 0
 EOF
 
-    echo "Writing /etc/profile..."
     cat > "$STAGE/etc/profile" <<'EOF'
 export HOME=/root
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 cd "$HOME"
 EOF
 
-    echo "Writing /etc/passwd..."
     echo "root:x:0:0:root:/root:/bin/sh" > "$STAGE/etc/passwd"
-
-    echo "Writing /etc/hostname..."
     echo "mackerel" > "$STAGE/etc/hostname"
-
-    echo
-    echo "[+] Done: $STAGE/  (copy to ext4 with install_disk.sh)"
 }
 
-# Mackerel-10
-build_rootfs_10() {
-    local LIST_FILE="$SCRIPT_DIR/initramfs.list"
+# Mackerel-10: ROMfs root, W5500 networking, telnetd
+config_10() {
+    mkdir -p "$STAGE"/{etc,etc/init.d,proc,sys,dev,tmp,root,usr/share/udhcpc}
 
-    echo "Creating initramfs staging directory at $STAGE..."
-    rm -rf "$STAGE"
-    mkdir -p "$STAGE"/{bin,sbin,etc,proc,sys,dev,tmp,root}
-
-    echo "Installing busybox..."
-    cp "$BUSYBOX" "$STAGE/bin/busybox"
-    chmod 755 "$STAGE/bin/busybox"
-
-    echo "Creating busybox symlinks..."
-    for cmd in \
-        sh hush \
-        echo cat ls mkdir rm cp mv ln touch pwd \
-        sleep ps kill killall \
-        mount umount \
-        hostname uname env \
-        dmesg \
-        grep sed cut tr wc head tail sort uniq \
-        find xargs \
-        expr test printf date \
-        free df stat readlink basename dirname \
-        dd clear reset \
-        ; do
-        ln -sf busybox "$STAGE/bin/$cmd"
-    done
-    ln -sf ../bin/busybox "$STAGE/sbin/init"
-
-    echo "Writing /etc/inittab..."
     cat > "$STAGE/etc/inittab" <<'EOF'
-# Mackerel-10 inittab
+# Mackerel-10 inittab (read-only ROMfs root)
 ::sysinit:/bin/mount -t devtmpfs dev /dev
 ::sysinit:/bin/mount -t proc proc /proc
 ::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mount -t tmpfs tmpfs /tmp
+::sysinit:/bin/mkdir -p /dev/pts
+::sysinit:/bin/mount -t devpts devpts /dev/pts
 ::sysinit:/bin/hostname mackerel
+::once:/etc/init.d/network
+::respawn:/usr/sbin/telnetd -F -l /bin/sh
 ::respawn:-/bin/sh
 ::restart:/sbin/init
-::ctrlaltdel:/bin/reboot
+::ctrlaltdel:/sbin/reboot
 EOF
 
-    echo "Writing /etc/passwd..."
     echo "root::0:0:root:/root:/bin/sh" > "$STAGE/etc/passwd"
 
-    echo "Writing /etc/profile..."
     cat > "$STAGE/etc/profile" <<'EOF'
 export HOME=/root
 export PATH=/bin:/sbin
@@ -246,96 +170,56 @@ export PS1='\u@mackerel:\w\$ '
 cd "$HOME"
 EOF
 
-    echo "Generating initramfs.list"
-    cat > "$LIST_FILE" <<EOF
-# Mackerel-10 initramfs
+    ln -sf /tmp/resolv.conf "$STAGE/etc/resolv.conf"
 
-dir  /proc          0755 0 0
-dir  /sys           0755 0 0
-dir  /dev           0755 0 0
-dir  /bin           0755 0 0
-dir  /sbin          0755 0 0
-dir  /etc           0755 0 0
-dir  /tmp           0777 0 0
-dir  /root          0700 0 0
-
-# Console device node
-nod  /dev/console   0600 0 0 c 5 1
-
-# BusyBox binary
-file /bin/busybox   ${STAGE}/bin/busybox 0755 0 0
-
-slink /init         /bin/busybox 0755 0 0
-
-# BusyBox symlinks
-slink /sbin/init         /bin/busybox 0755 0 0
-slink /bin/sh            busybox 0755 0 0
-slink /bin/hush          busybox 0755 0 0
-slink /bin/echo          busybox 0755 0 0
-slink /bin/cat           busybox 0755 0 0
-slink /bin/ls            busybox 0755 0 0
-slink /bin/mkdir         busybox 0755 0 0
-slink /bin/rm            busybox 0755 0 0
-slink /bin/cp            busybox 0755 0 0
-slink /bin/mv            busybox 0755 0 0
-slink /bin/ln            busybox 0755 0 0
-slink /bin/touch         busybox 0755 0 0
-slink /bin/pwd           busybox 0755 0 0
-slink /bin/sleep         busybox 0755 0 0
-slink /bin/ps            busybox 0755 0 0
-slink /bin/kill          busybox 0755 0 0
-slink /bin/killall       busybox 0755 0 0
-slink /bin/mount         busybox 0755 0 0
-slink /bin/umount        busybox 0755 0 0
-slink /bin/hostname      busybox 0755 0 0
-slink /bin/uname         busybox 0755 0 0
-slink /bin/dmesg         busybox 0755 0 0
-slink /bin/grep          busybox 0755 0 0
-slink /bin/sed           busybox 0755 0 0
-slink /bin/find          busybox 0755 0 0
-slink /bin/date          busybox 0755 0 0
-slink /bin/free          busybox 0755 0 0
-slink /bin/df            busybox 0755 0 0
-slink /bin/env           busybox 0755 0 0
-slink /bin/dd            busybox 0755 0 0
-slink /bin/clear         busybox 0755 0 0
-slink /bin/reset         busybox 0755 0 0
-
-# Config files
-file /etc/inittab        ${STAGE}/etc/inittab  0644 0 0
-file /etc/passwd         ${STAGE}/etc/passwd   0644 0 0
-file /etc/profile        ${STAGE}/etc/profile  0644 0 0
+    cat > "$STAGE/usr/share/udhcpc/default.script" <<'EOF'
+#!/bin/sh
+[ -z "$interface" ] && exit 1
+case "$1" in
+    deconfig)
+        ifconfig "$interface" 0.0.0.0
+        ;;
+    bound|renew)
+        ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
+        if [ -n "$router" ]; then
+            route del default 2>/dev/null || true
+            route add default gw "${router%% *}"
+        fi
+        if [ -n "$dns" ]; then
+            : > /etc/resolv.conf
+            for d in $dns; do
+                printf 'nameserver %s\n' "$d" >> /etc/resolv.conf
+            done
+        fi
+        ;;
+esac
 EOF
+    chmod 755 "$STAGE/usr/share/udhcpc/default.script"
 
-    echo "Done!"
+    cat > "$STAGE/etc/init.d/network" <<'EOF'
+#!/bin/sh
+# DHCP on eth0 (W5500) with a FIXED MAC (matches the bootloader's netboot MAC,
+# firmware/netboot.c) so the router can hand out the same IP every boot. Logs to
+# /tmp because the ROMfs root is read-only.
+exec >>/tmp/network.log 2>&1
+ifconfig lo 127.0.0.1 up
+ifconfig eth0 down
+ifconfig eth0 hw ether 02:4d:4b:52:46:01
+ifconfig eth0 up
+udhcpc -i eth0 -q -n -t 10 -T 3 || echo "network: DHCP failed"
+EOF
+    chmod 755 "$STAGE/etc/init.d/network"
 }
 
-# Mackerel-08
-build_rootfs_08() {
-    local OUT="$SCRIPT_DIR/romfs.img"
-
-    echo "Staging rootfs at $STAGE..."
-    rm -rf "$STAGE"
-    mkdir -p "$STAGE"/{bin,sbin,etc,proc,root,dev}
-
-    cp "$BUSYBOX" "$STAGE/bin/busybox"; chmod 755 "$STAGE/bin/busybox"
-
-    for cmd in sh echo cat ls mkdir rm rmdir cp mv ln pwd mount umount ps kill \
-               uname dmesg sleep free clear true false test halt poweroff reboot \
-               grep egrep fgrep sed find xargs dd \
-               head tail wc sort cut tr date df touch printf \
-               chmod chown du hexdump od strings top mknod mkfifo; do
-        ln -sf busybox "$STAGE/bin/$cmd"
-    done
-
-    ln -sf /bin/busybox "$STAGE/init"
-    ln -sf /bin/busybox "$STAGE/sbin/init"
+# Mackerel-08: minimal ROMfs root (in the boot ROM), no networking.
+config_08() {
+    mkdir -p "$STAGE"/{etc,proc,root,dev}
 
     cat > "$STAGE/etc/inittab" <<'EOF'
 ::sysinit:/bin/mount -t proc proc /proc
 ::sysinit:/bin/echo Mackerel-08 userspace up
 ::respawn:-/bin/sh
-::ctrlaltdel:/bin/reboot
+::ctrlaltdel:/sbin/reboot
 EOF
 
     cat > "$STAGE/etc/profile" <<'EOF'
@@ -343,59 +227,12 @@ export HOME=/root
 export PATH=/bin:/sbin
 export PS1='mackerel:\w# '
 EOF
-
-    echo "Building romfs image..."
-    genromfs -d "$STAGE" -f "$OUT" -V 'mackerel08'
-
-    assemble_rom08 "$OUT"
-
-    echo "Done!"
 }
 
-# Combine the bootloader.bin and ROMfs image into a single bin file for flashing
-assemble_rom08() {
-    local ROMFS="$1"
-    local FW_DIR="${SCRIPT_DIR}/../mackerel-68k/firmware"
-    local BL="$FW_DIR/bootloader.bin"
-    local ROM_SIZE=524288 # 512K
-    local OUT="$SCRIPT_DIR/rom08.bin"
+# Mackerel-F: ROMfs root, microSD + W5500
+config_f() {
+    mkdir -p "$STAGE"/{etc,etc/init.d,proc,sys,dev,tmp,mnt,root,usr/share/udhcpc,www/cgi-bin}
 
-    if [ ! -f "$FW_DIR/bootloader.bin" ]; then
-        echo "ERROR: $FW_DIR/bootloader.bin not found. Build the Mackerel-08 bootloader first..."
-        exit 1
-    fi
-
-    echo "Combining bootloader and ROMfs..."
-    dd if=/dev/zero of="$OUT" bs=4096 count=$((ROM_SIZE / 4096)) status=none
-    dd if="$BL" of="$OUT" conv=notrunc bs=4096 status=none
-    dd if="$ROMFS" of="$OUT" conv=notrunc bs=4096 seek=16 status=none
-    
-    echo "Flash $OUT with minipro."
-}
-
-# romf.bin, loaded to SDRAM by the bootloader
-build_rootfs_f() {
-    local OUT="$SCRIPT_DIR/romf.bin"
-
-    echo "Staging Mackerel-F ROMfs tree at $STAGE..."
-    rm -rf "$STAGE"
-    mkdir -p "$STAGE"/{bin,sbin,etc,proc,sys,dev,tmp,mnt,root}
-
-    cp "$BUSYBOX" "$STAGE/bin/busybox"; chmod 755 "$STAGE/bin/busybox"
-
-    for cmd in \
-        sh hush echo cat ls mkdir rm rmdir cp mv ln touch pwd sync \
-        chmod chown mknod dd mount umount clear \
-        ps kill sleep dmesg uname hostname uptime free df true false test grep sed \
-        reboot halt poweroff \
-        ifconfig ping route udhcpc wget telnetd httpd; do
-        ln -sf busybox "$STAGE/bin/$cmd"
-    done
-
-    ln -sf /bin/busybox "$STAGE/init"
-    ln -sf /bin/busybox "$STAGE/sbin/init"
-
-    # /dev is auto-populated by CONFIG_DEVTMPFS_MOUNT; /proc /sys /tmp via inittab.
     cat > "$STAGE/etc/inittab" <<'EOF'
 ::sysinit:/bin/mount -t proc proc /proc
 ::sysinit:/bin/mount -t sysfs sysfs /sys
@@ -407,15 +244,12 @@ build_rootfs_f() {
 ::sysinit:/etc/init.d/network
 ::sysinit:/bin/httpd -h /www -p 80
 ::sysinit:/bin/echo Mackerel-F uClinux - init OK
-::respawn:/bin/telnetd -F -l /bin/sh
+::respawn:/usr/sbin/telnetd -F -l /bin/sh
 ::respawn:-/bin/sh
-::ctrlaltdel:/bin/reboot
+::ctrlaltdel:/sbin/reboot
 EOF
 
-    # Block boot here until the microSD is up, then mount its Linux partition
-    # (mmcblk0p2, i.e. "sda2") as /root so the shell always launches with a
-    # persistent, writable home in place.
-    mkdir -p "$STAGE/etc/init.d"
+    # Block boot until the microSD is up, then mount its Linux partition on /root.
     cat > "$STAGE/etc/init.d/sdcard" <<'EOF'
 #!/bin/sh
 echo "Waiting for SD card..."
@@ -441,8 +275,6 @@ fi
 EOF
     chmod 755 "$STAGE/etc/init.d/sdcard"
 
-    # DHCP setup on boot
-    mkdir -p "$STAGE/usr/share/udhcpc"
     cat > "$STAGE/usr/share/udhcpc/default.script" <<'EOF'
 #!/bin/sh
 [ -z "$interface" ] && exit 1
@@ -489,8 +321,6 @@ export PATH=/bin:/sbin
 export PS1='\u@mackerel-f:\w\$ '
 cd "$HOME"
 EOF
-
-    mkdir -p "$STAGE/www/cgi-bin"
 
     cat > "$STAGE/www/cgi-bin/index.cgi" <<'CGIEOF'
 #!/bin/sh
@@ -552,24 +382,45 @@ small{color:#789}
 HTML
 CGIEOF
     chmod 755 "$STAGE/www/cgi-bin/index.cgi"
-    # ---------------------------------------------------------------------
-
-    echo "Building ROMfs image -> $OUT ..."
-    genromfs -d "$STAGE" -f "$OUT" -V 'mackerelf'
-
-    local sz
-    sz=$(stat -c%s "$OUT")
-    echo "[+] $OUT  ($sz bytes)"
-    if [ "$sz" -gt $((0x60000)) ]; then
-        echo "WARNING: romf.bin ($sz) exceeds the 384 KB (0x60000) XIP region at 0x7A0000!"
-        echo "         Trim busybox applets or it will overrun the top of SDRAM."
-    fi
-    echo "Copy $OUT to the SD card's FAT16 partition as romf.bin."
 }
 
-if [ "$BOARD" = "f" ] || [ "$BOARD" = "F" ]; then
-    build_rootfs_f
-else
-    # Otherwise, just call the rootfs generator for the specified board
-    build_rootfs_"${BOARD}"
-fi
+# Combine bootloader.bin + ROMfs into a single 512 KB flash image (Mackerel-08).
+assemble_rom08() {
+    local ROMFS="$1"
+    local FW_DIR="${SCRIPT_DIR}/../mackerel-68k/firmware"
+    local BL="$FW_DIR/bootloader.bin"
+    local ROM_SIZE=524288 # 512K
+    local OUT="$SCRIPT_DIR/rom08.bin"
+
+    [ -f "$BL" ] || { echo "ERROR: $BL not found. Build the Mackerel-08 bootloader first..."; exit 1; }
+
+    echo "Combining bootloader and ROMfs..."
+    dd if=/dev/zero of="$OUT" bs=4096 count=$((ROM_SIZE / 4096)) status=none
+    dd if="$BL"    of="$OUT" conv=notrunc bs=4096 status=none
+    dd if="$ROMFS" of="$OUT" conv=notrunc bs=4096 seek=16 status=none
+    echo "Flash $OUT with minipro."
+}
+
+package() {
+    case "$FORMAT" in
+        dir)
+            echo "$STAGE/  (copy to ext4 with install_disk.sh)"
+            ;;
+        romfs)
+            # rom.bin is appended into image.bin by build_kernel.sh (MTD_UCLINUX).
+            local OUT="$SCRIPT_DIR/rom.bin"
+            genromfs -d "$STAGE" -f "$OUT" -V "mackerel$BOARD"
+            echo "$OUT  ($(stat -c%s "$OUT") bytes) -> appended into image.bin"
+            ;;
+        romfs-rom)
+            # Mackerel-08: ROMfs lives in the boot ROM, combined with the bootloader.
+            local OUT="$SCRIPT_DIR/romfs.img"
+            genromfs -d "$STAGE" -f "$OUT" -V "mackerel08"
+            assemble_rom08 "$OUT"
+            ;;
+    esac
+}
+
+stage_busybox
+config_"$BOARD"
+package

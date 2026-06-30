@@ -18,24 +18,22 @@ esac
 export PATH=$PATH:$HOME/x-tools/"$SYSTEM"/bin
 CROSS="$SYSTEM-"
 
-# Concatenate ROMfs to the end of the kernel image (Mackerel-08)
+# Append a ROMfs into image.bin for the MTD_UCLINUX boards (10, F)
+# the romfs sits at __bss_start in the image
 append_romfs() {
-    local ROMFS="$SCRIPT_DIR/romfs.img"
+    local ROMFS="$1"
 
     if [ ! -f "$ROMFS" ]; then
-        echo "Error: romfs.img not found (run build_busybox.sh 08 + build_rootfs.sh 08 first)"
-        return 1
+        echo "Error: $ROMFS not found (run build_busybox.sh $BOARD + build_rootfs.sh $BOARD first)"
+        exit 1
     fi
 
-    # head.S code expects the ROMfs to start exactly at __bss_start
-    # Use objcopy to pad the kernel image and then append the ROMfs
+    # head.S expects the ROMfs to start exactly at __bss_start
     local bss_start
     bss_start=0x$("${CROSS}"nm vmlinux | awk '/ __bss_start$/{print $1}')
 
-    echo "Padding kernel image to align ROMds..."
+    echo "Padding kernel image to __bss_start and appending $ROMFS..."
     "${CROSS}"objcopy -O binary --pad-to="$bss_start" vmlinux image.bin
-
-    echo "Appending $ROMFS to image.bin..."
     cat "$ROMFS" >> image.bin
 }
 
@@ -48,17 +46,18 @@ make ARCH=m68k distclean
 echo "Defconfig ($DEFCONFIG)..."
 make ARCH=m68k "$DEFCONFIG"
 
-if [ "$BOARD" = "10" ] && [ ! -f "$SCRIPT_DIR/initramfs.list" ]; then
-    echo "Error: initramfs.list not found (run build_rootfs.sh $BOARD first)"
-    exit 1
-fi
-
 echo "Build kernel..."
 make ARCH=m68k CROSS_COMPILE="$CROSS" -j"$(nproc)"
 
 echo "Create image..."
-"${CROSS}"objcopy -O binary vmlinux image.bin
-
-# NOTE: Mackerel-08 includes its ROMfs in the 512KB Flash ROM, not in the kernel image
+case "$BOARD" in
+    10|f|F)
+        append_romfs "$SCRIPT_DIR/rom.bin"
+        ;;
+    *)
+        # Mackerel-08 and -30 do their own thing for the rootfs
+        "${CROSS}"objcopy -O binary vmlinux image.bin
+        ;;
+esac
 
 echo "Done! Image size: $(du -h image.bin | cut -f1)"
