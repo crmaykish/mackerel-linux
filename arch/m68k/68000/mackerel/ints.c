@@ -60,8 +60,14 @@ void process_int(int vec, struct pt_regs *fp)
 	do_IRQ(irq_num, fp);
 }
 
+#ifdef CONFIG_MACKEREL10
+// Mackerel-10 has a simple memory-mapped IRQ mask for the W5500 chip in the CPLD
+static void intc_irq_unmask(struct irq_data *d) { MEM(INTC_BASE) |= (1 << d->irq); }
+static void intc_irq_mask(struct irq_data *d)   { MEM(INTC_BASE) &= ~(1 << d->irq); }
+#else
 static void intc_irq_unmask(struct irq_data *d) {}
 static void intc_irq_mask(struct irq_data *d) {}
+#endif
 
 static struct irq_chip intc_irq_chip = {
 	.name      = "MACKEREL-INTC",

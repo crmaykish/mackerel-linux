@@ -11,10 +11,14 @@
 #elif defined(CONFIG_MACKEREL10)
 #define MACKEREL_BOARD_NAME "Mackerel-10"
 #define IRQ_NUM_IDE   3
+#define IRQ_NUM_NIC   4		// W5500, autovector level 4
 #define IRQ_NUM_DUART 5
 #define DUART1_BASE 0xFF8000
 #define IDE_BASE     0xFFC000	// command block (CS0)
 #define IDE_CTL_BASE 0xFF400C	// control block (CS1): alt status / device control
+#define SPI_BASE   0xFF0001
+#define SPI_NIC_CS 0xFF000B
+#define INTC_BASE  0xFF000D
 
 #elif defined(CONFIG_MACKERELF)
 #define MACKEREL_BOARD_NAME "Mackerel-F"
