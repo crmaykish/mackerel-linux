@@ -13,6 +13,13 @@
 #include <asm/traps.h>
 #include <asm/irq.h>
 #include <linux/platform_data/pata_mackerel.h>
+#ifdef CONFIG_MACKEREL10
+#include <linux/spi/spi.h>
+#include <linux/spi/spi_oc_tiny.h>
+#include <linux/gpio/machine.h>
+#include <linux/property.h>
+#include <linux/platform_data/wiznet.h>
+#endif
 
 extern void legacy_timer_tick(unsigned long ticks);
 
@@ -131,6 +138,76 @@ static struct platform_device ide_device = {
 		.platform_data = &ide_pdata,
 	},
 };
+
+static struct resource mackerel10_gpio_res[] = {
+	{
+		.name  = "dat",
+		.start = SPI_NIC_CS,
+		.end   = SPI_NIC_CS,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static const struct property_entry mackerel10_gpio_props[] = {
+	PROPERTY_ENTRY_STRING("label", "mackerel10-gpio"),
+	{ }
+};
+
+static const struct platform_device_info mackerel10_gpio_info = {
+	.name       = "basic-mmio-gpio",
+	.id         = PLATFORM_DEVID_NONE,
+	.res        = mackerel10_gpio_res,
+	.num_res    = ARRAY_SIZE(mackerel10_gpio_res),
+	.properties = mackerel10_gpio_props,
+};
+
+static struct tiny_spi_platform_data mackerel10_spi_pdata = {
+	.freq      = 33000000,
+	.baudwidth = 5,
+};
+
+static struct resource mackerel10_spi_res[] = {
+	{
+		.start = SPI_BASE,
+		.end   = SPI_BASE + 8,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device mackerel10_spi_device = {
+	.name          = "spi_oc_tiny",
+	.id            = 0,	// spi0
+	.dev           = {
+		.platform_data = &mackerel10_spi_pdata,
+	},
+	.resource      = mackerel10_spi_res,
+	.num_resources = ARRAY_SIZE(mackerel10_spi_res),
+};
+
+static struct gpiod_lookup_table mackerel10_spi_cs_gpios = {
+	.dev_id = "spi0",
+	.table  = {
+		GPIO_LOOKUP_IDX("mackerel10-gpio", 0, "cs", 0, GPIO_ACTIVE_HIGH),
+		{ }
+	},
+};
+
+static struct wiznet_platform_data mackerel10_w5500_pdata = {
+	.link_gpio = -1,
+	.mac_addr  = { 0x02, 0x4d, 0x4b, 0x31, 0x30, 0x01 },
+};
+
+static struct spi_board_info mackerel10_spi_board_info[] = {
+	{
+		.modalias      = "w5500",
+		.max_speed_hz  = 4000000,
+		.bus_num       = 0,
+		.chip_select   = 0,
+		.mode          = SPI_MODE_0,
+		.irq           = IRQ_NUM_NIC,	// W5500 INT, autovector level 4
+		.platform_data = &mackerel10_w5500_pdata,
+	},
+};
 #endif
 
 extern void mackerel_addr_err(void);
@@ -161,6 +238,14 @@ static int __init mackerel_platform_init(void)
 #ifdef CONFIG_MACKEREL10
 	if (platform_device_register(&ide_device))
 		pr_err("Mackerel-10: could not register IDE device\n");
+
+	gpiod_add_lookup_table(&mackerel10_spi_cs_gpios);
+	spi_register_board_info(mackerel10_spi_board_info,
+				ARRAY_SIZE(mackerel10_spi_board_info));
+	if (IS_ERR(platform_device_register_full(&mackerel10_gpio_info)))
+		pr_err("Mackerel-10: could not register GPIO device\n");
+	if (platform_device_register(&mackerel10_spi_device))
+		pr_err("Mackerel-10: could not register SPI device\n");
 #endif
 	return 0;
 }

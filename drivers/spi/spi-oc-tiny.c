@@ -24,11 +24,20 @@
 
 #define DRV_NAME "spi_oc_tiny"
 
+// Mackerel-10 uses 2-byte stride for its SPI registers
+#ifdef CONFIG_MACKEREL10
+#define TINY_SPI_RXDATA 0
+#define TINY_SPI_TXDATA 2
+#define TINY_SPI_STATUS 4
+#define TINY_SPI_CONTROL 6
+#define TINY_SPI_BAUD 8
+#else
 #define TINY_SPI_RXDATA 0
 #define TINY_SPI_TXDATA 4
 #define TINY_SPI_STATUS 8
 #define TINY_SPI_CONTROL 12
 #define TINY_SPI_BAUD 16
+#endif
 
 #define TINY_SPI_STATUS_TXE 0x1
 #define TINY_SPI_STATUS_TXR 0x2
@@ -73,8 +82,13 @@ static int tiny_spi_setup_transfer(struct spi_device *spi,
 		if (t->speed_hz && t->speed_hz != hw->speed_hz)
 			baud = tiny_spi_baud(spi, t->speed_hz);
 	}
+#ifdef CONFIG_MACKEREL10
+	writeb(baud, hw->base + TINY_SPI_BAUD);
+	writeb(hw->mode, hw->base + TINY_SPI_CONTROL);
+#else
 	writel(baud, hw->base + TINY_SPI_BAUD);
 	writel(hw->mode, hw->base + TINY_SPI_CONTROL);
+#endif
 	return 0;
 }
 
