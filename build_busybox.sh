@@ -19,10 +19,15 @@ esac
 export PATH=$PATH:$HOME/x-tools/"$SYSTEM"/bin
 CROSS="$SYSTEM-"
 DEFCONFIG="$SCRIPT_DIR/busybox_configs/mackerel${BOARD}_defconfig"
+BASE="$SCRIPT_DIR/busybox_configs/mackerel-nommu-base.config"
+FRAG="$SCRIPT_DIR/busybox_configs/mackerel${BOARD}.frag"
 BUILD_DIR="$SCRIPT_DIR/.busybox-${BOARD}-build"
 
-if [ ! -f "$DEFCONFIG" ]; then
-    echo "Error: $DEFCONFIG not found"
+# NOMMU boards build from a shared base config + a per-board fragment
+if [ -f "$BASE" ] && [ -f "$FRAG" ]; then
+    USE_FRAGMENT=1
+elif [ ! -f "$DEFCONFIG" ]; then
+    echo "Error: no $FRAG (+ base) and no $DEFCONFIG"
     exit 1
 fi
 
@@ -42,9 +47,16 @@ echo "Preparing build directory..."
 rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"; cd "$BUILD_DIR"
 cp "$CACHE_DIR/$TARBALL" .; tar xf "$TARBALL"; cd "busybox-${BUSYBOX_VERSION}"
 
-echo "Applying mackerel${BOARD}_defconfig..."
-cp "$DEFCONFIG" "configs/mackerel${BOARD}_defconfig"
-make ARCH=m68k CROSS_COMPILE="$CROSS" "mackerel${BOARD}_defconfig"
+if [ "${USE_FRAGMENT:-0}" = 1 ]; then
+    echo "Merging shared base + mackerel${BOARD}.frag..."
+    # The kernel's own Kconfig fragment merger
+    "$SCRIPT_DIR/scripts/kconfig/merge_config.sh" -m -Q -O . "$BASE" "$FRAG"
+    make ARCH=m68k CROSS_COMPILE="$CROSS" oldconfig < /dev/null
+else
+    echo "Applying mackerel${BOARD}_defconfig..."
+    cp "$DEFCONFIG" "configs/mackerel${BOARD}_defconfig"
+    make ARCH=m68k CROSS_COMPILE="$CROSS" "mackerel${BOARD}_defconfig"
+fi
 
 if [ "$LINK" = "dynamic" ]; then
     echo "Building..."
@@ -59,6 +71,11 @@ else
     cp busybox_unstripped "$OUT"
     [ -f busybox_unstripped.gdb ] && cp busybox_unstripped.gdb "$OUT.gdb"
 fi
+
+# Save the applet link map next to the binary so build_rootfs.sh generates the
+# rootfs symlinks from the actual compiled applet set
+make ARCH=m68k CROSS_COMPILE="$CROSS" busybox.links >/dev/null
+cp busybox.links "$OUT.links"
 
 echo "Done: $OUT"
 file "$OUT"
