@@ -188,3 +188,15 @@ sphinx_*/
 
 # bc language scripts (not LLVM bitcode)
 !kernel/time/timeconst.bc
+
+# Mackerel build artifacts
+*.links
+/busybox
+/busybox_nommu
+/busybox_mackerel08
+/busybox_mackerelf
+/romfs.img
+/romfs_mackerel08/
+/romfs_mackerel10/
+/romfs_mackerelf/
+/rootfs_mackerel30/
