@@ -3,7 +3,7 @@
  * Bitbang SPI controller for the Mackerel-30 68030 SBC.
  *
  * Uses the XR68C681 DUART auxiliary port for GPIO:
- *   OP2 = MOSI, OP3 = SCLK, OP4 = CS0 (ENC28J60), OP5 = CS1
+ *   OP2 = MOSI, OP3 = SCLK, OP4 = CS0 (W5500), OP5 = CS1
  *   IP4 = MISO
  *
  * SOPR (base+0x1F) sets output bits HIGH; ROPR (base+0x1D) sets them LOW.
@@ -32,7 +32,7 @@
 
 /* Chip select pin map: index → OP bit */
 static const u8 cs_bits[] = {
-	BIT(4),  /* CS0: OP4 — ENC28J60 */
+	BIT(4),  /* CS0: OP4 — W5500 */
 	BIT(5),  /* CS1: OP5 — spare */
 };
 
@@ -144,17 +144,17 @@ static int mackerel_spi_probe(struct platform_device *pdev)
 		goto err_put;
 	}
 
-	/* CS0: ENC28J60 Ethernet, interrupt on IRQ_AUTO_4 (CPLD PIN_10) */
+	/* CS0: WIZnet W5500 Ethernet, interrupt on IRQ_AUTO_4 (CPLD PIN_10) */
 	{
-		struct spi_board_info enc_info = {
-			.modalias     = "enc28j60",
+		struct spi_board_info nic_info = {
+			.modalias     = "w5500",
 			.max_speed_hz = 8000000,
 			.chip_select  = 0,
 			.mode         = SPI_MODE_0,
 			.irq          = IRQ_AUTO_4,
 		};
-		if (!spi_new_device(host, &enc_info))
-			dev_warn(&pdev->dev, "failed to create enc28j60 device\n");
+		if (!spi_new_device(host, &nic_info))
+			dev_warn(&pdev->dev, "failed to create w5500 device\n");
 	}
 
 	dev_info(&pdev->dev, "Mackerel-30 SPI bitbang controller ready\n");
