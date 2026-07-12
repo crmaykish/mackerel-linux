@@ -200,3 +200,5 @@ sphinx_*/
 /romfs_mackerel10/
 /romfs_mackerelf/
 /rootfs_mackerel30/
+/busybox_*.gdb
+/dist/

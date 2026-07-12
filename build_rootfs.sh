@@ -231,7 +231,7 @@ EOF
 
 # Mackerel-F: ROMfs root, microSD + W5500
 config_f() {
-    mkdir -p "$STAGE"/{etc,etc/init.d,proc,sys,dev,tmp,mnt,root,usr/share/udhcpc,www/cgi-bin}
+    mkdir -p "$STAGE"/{etc,etc/init.d,proc,sys,dev,tmp,mnt,root,usr/share/udhcpc}
 
     cat > "$STAGE/etc/inittab" <<'EOF'
 ::sysinit:/bin/mount -t proc proc /proc
@@ -242,7 +242,6 @@ config_f() {
 ::sysinit:/bin/hostname mackerel-f
 ::sysinit:/etc/init.d/sdcard
 ::sysinit:/etc/init.d/network
-::sysinit:/bin/httpd -h /www -p 80
 ::sysinit:/bin/echo Mackerel-F uClinux - init OK
 ::respawn:/usr/sbin/telnetd -F -l /bin/sh
 ::respawn:-/bin/sh
@@ -321,67 +320,6 @@ export PATH=/bin:/sbin
 export PS1='\u@mackerel-f:\w\$ '
 cd "$HOME"
 EOF
-
-    cat > "$STAGE/www/cgi-bin/index.cgi" <<'CGIEOF'
-#!/bin/sh
-# Mackerel-F status page.
-
-COUNTER=/tmp/visitors
-for d in /root /tmp; do
-    if touch "$d/.wtest" 2>/dev/null; then
-        rm -f "$d/.wtest"
-        COUNTER="$d/visitors"
-        break
-    fi
-done
-
-count=$(cat "$COUNTER" 2>/dev/null)
-[ -z "$count" ] && count=0
-count=$((count + 1))
-echo "$count" > "$COUNTER"
-
-read up idle < /proc/uptime
-up=${up%.*}
-days=$((up / 86400))
-hrs=$(((up % 86400) / 3600))
-mins=$(((up % 3600) / 60))
-secs=$((up % 60))
-
-memtotal=$(sed -n 's/^MemTotal: *\([0-9]*\).*/\1/p' /proc/meminfo)
-memfree=$(sed -n 's/^MemFree: *\([0-9]*\).*/\1/p' /proc/meminfo)
-kver=$(uname -srm)
-host=$(hostname)
-
-echo "Content-type: text/html"
-echo ""
-cat <<HTML
-<!DOCTYPE html>
-<html><head><title>$host</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:monospace;background:#101418;color:#cfe;margin:0;padding:2em}
-h1{color:#5cf;margin:0}
-table{border-collapse:collapse;margin-top:1em}
-td{padding:.3em 1em;border-bottom:1px solid #233}
-.n{color:#fc6;text-align:right}
-.c{font-size:2.5em;color:#6f9;margin:.2em 0}
-small{color:#789}
-</style></head>
-<body>
-<h1>$host</h1>
-<small>Motorola 68000 (fx68k) &middot; uClinux &middot; busybox httpd</small>
-<table>
-<tr><td>Kernel</td><td class="n">$kver</td></tr>
-<tr><td>Uptime</td><td class="n">${days}d ${hrs}h ${mins}m ${secs}s</td></tr>
-<tr><td>RAM total</td><td class="n">$memtotal kB</td></tr>
-<tr><td>RAM free</td><td class="n">$memfree kB</td></tr>
-</table>
-<p>You are visitor number</p>
-<p class="c">$count</p>
-</body></html>
-HTML
-CGIEOF
-    chmod 755 "$STAGE/www/cgi-bin/index.cgi"
 }
 
 # Combine bootloader.bin + ROMfs into a single 512 KB flash image (Mackerel-08).
