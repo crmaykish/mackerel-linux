@@ -106,9 +106,9 @@ EOF
 ::sysinit:/bin/mount -t proc proc /proc
 ::sysinit:/bin/mount -t sysfs sysfs /sys
 ::sysinit:/bin/mount -t msdos -o ro /dev/sda1 /boot
-::sysinit:/bin/sysctl -p /etc/sysctl.conf
-::sysinit:/bin/syslogd
-::sysinit:/bin/klogd
+::sysinit:/sbin/sysctl -p /etc/sysctl.conf
+::sysinit:/sbin/syslogd
+::sysinit:/sbin/klogd
 ::once:/etc/init.d/network
 ::respawn:/etc/login <>/dev/ttyXR0 >/dev/ttyXR0 2>&1
 EOF
