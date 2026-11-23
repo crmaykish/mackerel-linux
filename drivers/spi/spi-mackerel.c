@@ -102,7 +102,7 @@ static int mackerel_spi_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret;
 
-	host = spi_alloc_host(&pdev->dev, sizeof(*sp));
+	host = devm_spi_alloc_host(&pdev->dev, sizeof(*sp));
 	if (!host)
 		return -ENOMEM;
 
@@ -110,10 +110,8 @@ static int mackerel_spi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, sp);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		ret = -ENODEV;
-		goto err_put;
-	}
+	if (!res)
+		return -ENODEV;
 
 	/*
 	 * Use devm_ioremap rather than devm_ioremap_resource to avoid
@@ -121,10 +119,8 @@ static int mackerel_spi_probe(struct platform_device *pdev)
 	 * same DUART base address.
 	 */
 	sp->base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
-	if (!sp->base) {
-		ret = -ENOMEM;
-		goto err_put;
-	}
+	if (!sp->base)
+		return -ENOMEM;
 
 	host->bus_num        = 0;
 	host->num_chipselect = ARRAY_SIZE(cs_bits);
@@ -141,7 +137,7 @@ static int mackerel_spi_probe(struct platform_device *pdev)
 	ret = spi_bitbang_start(&sp->bitbang);
 	if (ret) {
 		dev_err(&pdev->dev, "spi_bitbang_start failed: %d\n", ret);
-		goto err_put;
+		return ret;
 	}
 
 	/* CS0: WIZnet W5500 Ethernet, interrupt on IRQ_AUTO_4 (CPLD PIN_10) */
@@ -159,10 +155,6 @@ static int mackerel_spi_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "Mackerel-30 SPI bitbang controller ready\n");
 	return 0;
-
-err_put:
-	spi_controller_put(host);
-	return ret;
 }
 
 static void mackerel_spi_remove(struct platform_device *pdev)
@@ -170,7 +162,6 @@ static void mackerel_spi_remove(struct platform_device *pdev)
 	struct mackerel_spi *sp = platform_get_drvdata(pdev);
 
 	spi_bitbang_stop(&sp->bitbang);
-	spi_controller_put(sp->bitbang.ctlr);
 }
 
 static struct platform_driver mackerel_spi_driver = {
