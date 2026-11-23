@@ -701,9 +701,9 @@ config SPI_MACKEREL
 	help
 	  Bitbang SPI controller for the Mackerel-30 homebrew 68030 SBC.
 	  Drives MOSI, SCLK, and CS lines through the XR68C681 DUART output
-	  port (OP2/OP3/OP4-6) and reads MISO from the input port (IP4).
+	  port (OP2/OP3/OP4-5) and reads MISO from the input port (IP4).
 
-	  Say Y to enable SPI peripherals such as the ENC28J60 Ethernet chip.
+	  Say Y to enable SPI peripherals such as the W5500 Ethernet chip.
 
 config SPI_MESON_SPICC
 	tristate "Amlogic Meson SPICC controller"

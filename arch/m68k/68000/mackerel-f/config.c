@@ -13,7 +13,6 @@
 #include <linux/spi/spi_oc_tiny.h>
 #include <linux/gpio/machine.h>
 #include <linux/property.h>
-#include <linux/platform_data/wiznet.h>
 #include <asm/machdep.h>
 #include <asm/mackerel.h>
 #include <asm/traps.h>
@@ -166,11 +165,6 @@ static struct gpiod_lookup_table mackerelf_spi2_cs_gpios = {
 	},
 };
 
-static struct wiznet_platform_data mackerelf_w5500_pdata = {
-	.link_gpio = -1,
-	.mac_addr  = { 0x02, 0x4d, 0x4b, 0x52, 0x46, 0x01 },
-};
-
 static struct spi_board_info mackerelf_spi_board_info[] = {
 	{
 		.modalias     = "mmc-spi-slot",
@@ -186,7 +180,6 @@ static struct spi_board_info mackerelf_spi_board_info[] = {
 		.chip_select    = 0,
 		.mode           = SPI_MODE_0,
 		.irq            = IRQ_NUM_NIC,	// W5500 INT, autovector level 4
-		.platform_data  = &mackerelf_w5500_pdata,
 	},
 };
 

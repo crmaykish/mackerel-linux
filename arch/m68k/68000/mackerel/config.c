@@ -18,7 +18,6 @@
 #include <linux/spi/spi_oc_tiny.h>
 #include <linux/gpio/machine.h>
 #include <linux/property.h>
-#include <linux/platform_data/wiznet.h>
 #endif
 
 extern void legacy_timer_tick(unsigned long ticks);
@@ -192,11 +191,6 @@ static struct gpiod_lookup_table mackerel10_spi_cs_gpios = {
 	},
 };
 
-static struct wiznet_platform_data mackerel10_w5500_pdata = {
-	.link_gpio = -1,
-	.mac_addr  = { 0x02, 0x4d, 0x4b, 0x31, 0x30, 0x01 },
-};
-
 static struct spi_board_info mackerel10_spi_board_info[] = {
 	{
 		.modalias      = "w5500",
@@ -205,7 +199,6 @@ static struct spi_board_info mackerel10_spi_board_info[] = {
 		.chip_select   = 0,
 		.mode          = SPI_MODE_0,
 		.irq           = IRQ_NUM_NIC,	// W5500 INT, autovector level 4
-		.platform_data = &mackerel10_w5500_pdata,
 	},
 };
 #endif
