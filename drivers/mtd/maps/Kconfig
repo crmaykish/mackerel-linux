@@ -325,10 +325,4 @@ config MTD_MACKEREL08
 	help
 	  Maps the Mackerel-08 boot ROM at 0x390000 as an MTD device.
 
-config MTD_MACKERELF
-	tristate "Mackerel-F XIP ROMfs map"
-	depends on MTD_ROM
-	help
-	  Maps the Mackerel-F XIP ROMfs region at 0x700000 as an MTD device.
-
 endmenu
