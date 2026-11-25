@@ -183,16 +183,12 @@ static struct spi_board_info mackerelf_spi_board_info[] = {
 	},
 };
 
-extern void mackerel_addr_err(void);
-extern void mackerel_bus_err(void);
-
 void __init config_BSP(char *command, int len)
 {
 	pr_info(MACKEREL_BOARD_NAME " support by Colin Maykish <crmaykish@protonmail.com>\n");
 
-	// Early exception handlers
-	_ramvec[2] = (e_vector)mackerel_bus_err;
-	_ramvec[3] = (e_vector)mackerel_addr_err;
+	// Early exception handlers, so a fault during boot is reported
+	mackerel_trap_init();
 
 	mach_reset      = mackerelf_reset;
 	mach_sched_init = mackerelf_sched_init;

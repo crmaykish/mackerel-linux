@@ -11,21 +11,6 @@
 #include <asm/setup.h>
 
 asmlinkage void system_call(void);
-asmlinkage void buserr(void);
-asmlinkage void trap(void);
-asmlinkage void trap3(void);
-asmlinkage void trap4(void);
-asmlinkage void trap5(void);
-asmlinkage void trap6(void);
-asmlinkage void trap7(void);
-asmlinkage void trap8(void);
-asmlinkage void trap9(void);
-asmlinkage void trap10(void);
-asmlinkage void trap11(void);
-asmlinkage void trap12(void);
-asmlinkage void trap13(void);
-asmlinkage void trap14(void);
-asmlinkage void trap15(void);
 asmlinkage irqreturn_t bad_interrupt(int, void *);
 asmlinkage irqreturn_t inthandler1(void);
 asmlinkage irqreturn_t inthandler2(void);
@@ -75,55 +60,6 @@ static struct irq_chip intc_irq_chip = {
 	.irq_unmask = intc_irq_unmask,
 };
 
-/*
- * 68000 bus/address error frame at handler entry (before any C prologue):
- *   SP+0:  function code (word)
- *   SP+2:  fault address (long)
- *   SP+6:  instruction register (word)
- *   SP+8:  SR (word)
- *   SP+10: PC (long)
- *
- * Read fault_addr and PC into d0/d1 before touching SP, then call C handler.
- */
-asm(
-	".globl mackerel_addr_err\n"
-	"mackerel_addr_err:\n"
-	"	move.l	2(%sp), %d0\n"
-	"	move.l	10(%sp), %d1\n"
-	"	move.l	%d1, -(%sp)\n"
-	"	move.l	%d0, -(%sp)\n"
-	"	jsr	mackerel_addr_err_c\n"
-	"0:	bra.s	0b\n"
-);
-
-asm(
-	".globl mackerel_bus_err\n"
-	"mackerel_bus_err:\n"
-	"	move.l	2(%sp), %d0\n"
-	"	move.l	10(%sp), %d1\n"
-	"	move.l	%d1, -(%sp)\n"
-	"	move.l	%d0, -(%sp)\n"
-	"	jsr	mackerel_bus_err_c\n"
-	"0:	bra.s	0b\n"
-);
-
-void mackerel_addr_err_c(unsigned long fault_addr, unsigned long pc)
-{
-	pr_emerg("Address error: fault_addr=0x%08lx pc=0x%08lx\n",
-		 fault_addr, pc);
-	panic("Address error");
-}
-
-void mackerel_bus_err_c(unsigned long fault_addr, unsigned long pc)
-{
-	pr_emerg("Bus error: fault_addr=0x%08lx pc=0x%08lx\n",
-		 fault_addr, pc);
-	panic("Bus error");
-}
-
-extern void mackerel_bus_err(void);
-extern void mackerel_addr_err(void);
-
 void __init trap_init(void)
 {
 	int i;
@@ -132,9 +68,8 @@ void __init trap_init(void)
 	for (i = 0; i < 256; i++)
 		_ramvec[i] = (e_vector)bad_interrupt;
 
-	/* Exception vectors 2-3: bus/address error */
-	_ramvec[2] = (e_vector)mackerel_bus_err;
-	_ramvec[3] = (e_vector)mackerel_addr_err;
+	/* CPU exceptions signal the faulting program */
+	mackerel_trap_init();
 
 	/* Autovectors (IPL 1-7) */
 	_ramvec[25] = (e_vector)inthandler1;

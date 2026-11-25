@@ -198,11 +198,19 @@ static inline int frame_extra_sizes(int f)
 
 static inline void adjustformat(struct pt_regs *regs)
 {
+#ifdef CONFIG_COLDFIRE
 	/*
 	 * set format byte to make stack appear modulo 4, which it will
 	 * be when doing the rte
 	 */
 	regs->format = 0x4;
+#else
+	/*
+	 * 68000-family: the 68000 stacks no format word and ignores this one,
+	 * but a 68010 rte only accepts format 0 here (format 4 is a format error)
+	 */
+	regs->format = 0;
+#endif
 }
 
 static inline void save_a5_state(struct sigcontext *sc, struct pt_regs *regs)
@@ -656,6 +664,13 @@ static int mangle_kernel_stack(struct pt_regs *regs, int formatvec,
 	}
 	if (extra && copy_from_user(buf, fp, extra))
 		return -1;
+#if !defined(CONFIG_MMU) && !defined(CONFIG_COLDFIRE)
+	/*
+	 * 68000-family: don't take the format from the user's saved context.
+	 * A 68010 rte accepts only format 0 here, and the 68000 ignores it.
+	 */
+	formatvec &= 0xfff;
+#endif
 	regs->format = formatvec >> 12;
 	regs->vector = formatvec & 0xfff;
 	if (extra) {

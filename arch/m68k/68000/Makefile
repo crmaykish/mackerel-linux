@@ -16,8 +16,8 @@ obj-$(CONFIG_ROM)	+= romvec.o
 obj-$(CONFIG_DRAGEN2)	+= dragen2.o
 obj-$(CONFIG_UCSIMM)	+= ucsimm.o
 obj-$(CONFIG_UCDIMM)	+= ucsimm.o
-obj-$(CONFIG_MACKEREL10)	+= entry.o mackerel/
-obj-$(CONFIG_MACKEREL08)	+= entry.o mackerel/
-obj-$(CONFIG_MACKERELF)	+= entry.o mackerel-f/
+obj-$(CONFIG_MACKEREL10)	+= entry.o mackerel_entry.o mackerel_traps.o mackerel/
+obj-$(CONFIG_MACKEREL08)	+= entry.o mackerel_entry.o mackerel_traps.o mackerel/
+obj-$(CONFIG_MACKERELF)	+= entry.o mackerel_entry.o mackerel_traps.o mackerel-f/
 
 obj-y			+= head.o

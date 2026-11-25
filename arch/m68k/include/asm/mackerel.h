@@ -119,4 +119,9 @@ void duart_puts(const char *s);
 char duart_getc(void);
 #endif /* !CONFIG_MACKERELF */
 
+#ifndef CONFIG_MMU
+// Point the CPU exception vectors at the signal-raising stubs (68000/mackerel_traps.c)
+void mackerel_trap_init(void);
+#endif
+
 #endif /* _MACKEREL_H */

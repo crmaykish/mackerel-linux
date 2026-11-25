@@ -42,46 +42,6 @@ static struct irq_chip intc_irq_chip = {
 	.irq_unmask = intc_irq_unmask,
 };
 
-// Set up some early exception handlers to ease debugging
-asm(
-	".globl mackerel_addr_err\n"
-	"mackerel_addr_err:\n"
-	"	move.l	2(%sp), %d0\n"
-	"	move.l	10(%sp), %d1\n"
-	"	move.l	%d1, -(%sp)\n"
-	"	move.l	%d0, -(%sp)\n"
-	"	jsr	mackerel_addr_err_c\n"
-	"0:	bra.s	0b\n"
-);
-
-asm(
-	".globl mackerel_bus_err\n"
-	"mackerel_bus_err:\n"
-	"	move.l	2(%sp), %d0\n"
-	"	move.l	10(%sp), %d1\n"
-	"	move.l	%d1, -(%sp)\n"
-	"	move.l	%d0, -(%sp)\n"
-	"	jsr	mackerel_bus_err_c\n"
-	"0:	bra.s	0b\n"
-);
-
-void mackerel_addr_err_c(unsigned long fault_addr, unsigned long pc)
-{
-	pr_emerg("Address error: fault_addr=0x%08lx pc=0x%08lx\n",
-		 fault_addr, pc);
-	panic("Address error");
-}
-
-void mackerel_bus_err_c(unsigned long fault_addr, unsigned long pc)
-{
-	pr_emerg("Bus error: fault_addr=0x%08lx pc=0x%08lx\n",
-		 fault_addr, pc);
-	panic("Bus error");
-}
-
-extern void mackerel_bus_err(void);
-extern void mackerel_addr_err(void);
-
 void __init trap_init(void)
 {
 	int i;
@@ -90,8 +50,8 @@ void __init trap_init(void)
 	for (i = 0; i < 256; i++)
 		_ramvec[i] = (e_vector)bad_interrupt;
 
-	_ramvec[2] = (e_vector)mackerel_bus_err;
-	_ramvec[3] = (e_vector)mackerel_addr_err;
+	// CPU exceptions signal the faulting program
+	mackerel_trap_init();
 
 	// Autovectors
 	_ramvec[25] = (e_vector)inthandler1;

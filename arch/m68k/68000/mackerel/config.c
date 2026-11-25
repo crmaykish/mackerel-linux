@@ -203,16 +203,12 @@ static struct spi_board_info mackerel10_spi_board_info[] = {
 };
 #endif
 
-extern void mackerel_addr_err(void);
-extern void mackerel_bus_err(void);
-
 void __init config_BSP(char *command, int len)
 {
 	pr_info(MACKEREL_BOARD_NAME " support by Colin Maykish <crmaykish@protonmail.com>\n");
 
-	// Set up some early exception handlers
-	_ramvec[2] = (e_vector)mackerel_bus_err;
-	_ramvec[3] = (e_vector)mackerel_addr_err;
+	// Early exception handlers, so a fault during boot is reported
+	mackerel_trap_init();
 
 	// Disable DUART interrupts, let the driver set them up later
 	MEM(DUART1_IMR) = 0;
